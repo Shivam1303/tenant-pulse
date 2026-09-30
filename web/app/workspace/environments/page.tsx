@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Copy, Globe, MoreHorizontal, Plus, Trash2, Users, X } from "lucide-react";
+import { CheckCircle2, Copy, Download, Globe, MoreHorizontal, Plus, Trash2, Users, X } from "lucide-react";
 import { useWorkspace } from "../../../components/workspace-provider";
+import { ImportDialog } from "../../../components/import-dialog";
 import { Empty, Field, Menu } from "../../../components/ui";
 import { builtins, requiredVariables, uniqueName } from "../../../lib/plan";
 import type { Environment } from "../../../lib/types";
@@ -185,6 +186,7 @@ function EnvironmentEditor({ env }: { env: Environment }) {
 export default function EnvironmentsPage() {
   const { plan, env, environments, addEnvironment, dirtyEnvironments } = useWorkspace();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   if (!plan || !env) return null;
   const selected = environments.find((e) => e.id === selectedId) || env;
 
@@ -211,6 +213,9 @@ export default function EnvironmentsPage() {
           </p>
         </div>
         <div className="page-actions">
+          <button className="btn" onClick={() => setImporting(true)} title="Import a Postman environment export">
+            <Download /> Import Postman
+          </button>
           <button className="btn primary" onClick={create}>
             <Plus /> New environment
           </button>
@@ -250,6 +255,7 @@ export default function EnvironmentsPage() {
           <EnvironmentEditor key={selected.id} env={selected} />
         </div>
       )}
+      {importing ? <ImportDialog onClose={() => setImporting(false)} /> : null}
     </div>
   );
 }

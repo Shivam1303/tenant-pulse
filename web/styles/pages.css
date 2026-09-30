@@ -1033,6 +1033,93 @@
   }
 }
 
+/* Import requests */
+.collection-actions {
+  display: flex;
+  gap: 4px;
+}
+.import-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.import-list-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+.import-list-head label,
+.import-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.import-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.import-item:last-child {
+  border-bottom: 0;
+}
+.import-item:hover {
+  background: var(--hover);
+}
+.import-item.off {
+  opacity: 0.7;
+  cursor: default;
+}
+.import-item input {
+  margin-top: 3px;
+}
+.import-item .method {
+  flex: none;
+  min-width: 44px;
+  margin-top: 1px;
+}
+.import-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.import-text strong {
+  font-size: 13px;
+}
+.import-text small {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.import-badges {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.import-env {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+}
+.import-env p {
+  margin: 0;
+}
 .trend-env {
   width: auto;
   min-width: 160px;

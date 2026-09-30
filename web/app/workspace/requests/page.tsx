@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Braces,
   Copy,
+  Download,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { useWorkspace } from "../../../components/workspace-provider";
 import { Empty, Field, Menu, PairEditor, Switch, useConfirm } from "../../../components/ui";
+import { ImportDialog } from "../../../components/import-dialog";
 import { api } from "../../../lib/api";
 import { blankRequest, builtins, isAbsolute, ownsUrl, requestVariables, uniqueName, unsafeMethods } from "../../../lib/plan";
 import { bytes, ms } from "../../../lib/format";
@@ -81,6 +83,7 @@ export default function RequestsPage() {
   const [tenantId, setTenantId] = useState("");
   const [response, setResponse] = useState<TryResult | null>(null);
   const [sending, setSending] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const knownVariables = useMemo(() => {
     const set = new Set(builtins);
@@ -216,9 +219,19 @@ export default function RequestsPage() {
               {plan.requests.filter((r) => r.enabled).length} of {plan.requests.length} in the run
             </small>
           </div>
-          <button className="btn icon sm" onClick={add} aria-label="Add request" title="Add request">
-            <Plus />
-          </button>
+          <div className="collection-actions">
+            <button
+              className="btn ghost icon sm"
+              onClick={() => setImporting(true)}
+              aria-label="Import requests"
+              title="Import from cURL or Postman"
+            >
+              <Download />
+            </button>
+            <button className="btn icon sm" onClick={add} aria-label="Add request" title="Add request">
+              <Plus />
+            </button>
+          </div>
         </div>
         <div className="base-url">
           <label htmlFor="base-url-edit" className="label">
@@ -491,6 +504,7 @@ export default function RequestsPage() {
         </div>
         <ResponsePanel response={response} sending={sending} />
       </section>
+      {importing ? <ImportDialog onClose={() => setImporting(false)} onImported={(i) => select(i)} /> : null}
     </div>
   );
 }

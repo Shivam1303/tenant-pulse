@@ -192,3 +192,10 @@ export type LoginTest = {
   ms?: number;
   body?: string;
 };
+export type ImportResult = {
+  kind: "curl" | "postman" | "postman-environment";
+  name: string | null;
+  requests: { request: RequestSpec; warnings: string[]; error?: string }[];
+  environment: { name: string; baseUrl: string | null; variables: Record<string, string> } | null;
+  warnings: string[];
+};
