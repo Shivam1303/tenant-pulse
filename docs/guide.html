@@ -316,8 +316,9 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
     <div class="table-wrap"><table>
       <thead><tr><th style="width:170px">Term</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td><strong>Plan</strong></td><td>Everything for one test: base URL, requests, tenants, login request, load settings and pass criteria. Pick or create plans from the menu at the top.</td></tr>
-        <tr><td><strong>Tenant</strong></td><td>One client of your API. It has a client number, and either a username and password (the app logs in for it) or a pasted bearer token, plus its own variables.</td></tr>
+        <tr><td><strong>Plan</strong></td><td>What to test and how hard: requests, login request, load settings and pass criteria. Pick or create plans from the menu at the top.</td></tr>
+        <tr><td><strong>Environment</strong></td><td>Where to test, such as Local or Staging: a base URL, shared variables and that system's tenants with their credentials. Pick it next to the plan at the top. Several plans can use one environment.</td></tr>
+        <tr><td><strong>Tenant</strong></td><td>One client of your API, in one environment. It has a client number, and either a username and password (the app logs in for it) or a pasted bearer token, plus its own variables.</td></tr>
         <tr><td><strong>Virtual user (VU)</strong></td><td>A simulated person. Each VU calls a request, pauses, then calls the next one, looping through all enabled requests in order. Total VUs = tenants × VUs per tenant, capped at 1,000.</td></tr>
         <tr><td><strong>Think time</strong></td><td>The pause after each call, like a user reading the screen. It varies by ±50% so users drift apart. With 0 think time, every VU sends requests as fast as the API answers.</td></tr>
         <tr><td><strong>p50 / p95 / p99</strong></td><td>Latency percentiles. p95 = 250 ms means 95% of calls finished within 250 ms. p95 is the usual number to watch.</td></tr>
@@ -332,11 +333,11 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
         <tr><td><code>{{token}}</code></td><td>The tenant's bearer token, from the login request or pasted in.</td></tr>
         <tr><td><code>{{client}}</code></td><td>The tenant's client number.</td></tr>
         <tr><td><code>{{username}}</code></td><td>The tenant's username.</td></tr>
-        <tr><td><code>{{baseUrl}}</code></td><td>The plan's base URL.</td></tr>
+        <tr><td><code>{{baseUrl}}</code></td><td>The environment's base URL.</td></tr>
         <tr><td><code>{{password}}</code></td><td>Only inside the login request.</td></tr>
       </tbody>
     </table></div>
-    <p>Anything else, such as <code>{{orderId}}</code>, is a tenant variable. When a request uses it, a matching field appears on every tenant automatically. Values are escaped for JSON bodies and URL-encoded in paths, so you never need to quote them yourself.</p>
+    <p>Anything else, such as <code>{{orderId}}</code>, is a tenant variable. When a request uses it, a matching field appears on every tenant automatically. A value that is the same for all tenants of an environment can be set once as a <strong>shared variable</strong> on the Environments screen; a tenant's own value wins. Values are escaped for JSON bodies and URL-encoded in paths, so you never need to quote them yourself.</p>
   </section>
 
   <!-- 04 -->
@@ -345,9 +346,9 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
     <p class="sub">From an empty plan to a report.</p>
 
     <ol class="steps">
-      <li><strong>Set the base URL</strong><p>On <em>Requests</em>, enter the API origin at the top of the collection, for example <code>https://api.staging.example.com</code>.</p></li>
-      <li><strong>Add and try a request</strong><p>Add a request (e.g. <code>GET /products</code>), pick a tenant in the response panel and click <strong>Send</strong>. It calls the API once with your unsaved edits so you can check the response before running load.</p></li>
-      <li><strong>Add tenants</strong><p>On <em>Tenants</em>, add each client with its login or token and fill in any variables. Each row shows whether that tenant is ready. Many tenants? Use <strong>Import CSV</strong>.</p></li>
+      <li><strong>Set the environment</strong><p>Pick the environment at the top (or create one on <em>Environments</em>) and enter its base URL, for example <code>https://api.staging.example.com</code>. The base URL is also editable at the top of the <em>Requests</em> collection.</p></li>
+      <li><strong>Add and try a request</strong><p>Add a request (e.g. <code>GET /products</code>), or <strong>import</strong> one from a cURL command or a Postman collection. Pick a tenant in the response panel and click <strong>Send</strong>. It calls the API once with your unsaved edits so you can check the response before running load.</p></li>
+      <li><strong>Add tenants</strong><p>On <em>Tenants</em>, add each client of the current environment with its login or token and fill in any variables. Each row shows whether that tenant is ready. Many tenants? Use <strong>Import CSV</strong>.</p></li>
       <li><strong>Check the login request</strong><p>On the <em>Login request</em> tab, confirm the endpoint and where the token sits in the response (e.g. <code>token</code> or <code>data.accessToken</code>). Then open a tenant and click <strong>Test login</strong> (or <strong>Check token</strong> for token tenants).</p></li>
       <li><strong>Choose the load</strong><p>On <em>Run</em>, start small: 2 VUs per tenant, 30 s ramp-up, 2 minutes total, 1000 ms think time. Set pass criteria, e.g. p95 under 500 ms and errors under 1%.</p></li>
       <li><strong>Check, then start</strong><p>Click <strong>Check only</strong> to run just the preflight. When it passes, click <strong>Start run</strong> and watch <em>Results → Live</em>.</p></li>
@@ -359,7 +360,7 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
   <!-- 05 -->
   <section id="screens">
     <h2><span class="num">05</span>Screen by screen</h2>
-    <p class="sub">The four screens in the left sidebar.</p>
+    <p class="sub">The five screens in the left sidebar.</p>
 
     <div class="screen">
       <div class="screen-head"><h3>Requests</h3><span class="path">/workspace/requests</span></div>
@@ -368,13 +369,14 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
         <li>The switch next to each request includes it in or leaves it out of the run.</li>
         <li>Editor tabs: <strong>Params</strong>, <strong>Headers</strong>, <strong>Body</strong> (JSON, text or form) and <strong>Auth</strong>. <em>Tenant bearer token</em> sends <code>Authorization: Bearer {{token}}</code>.</li>
         <li>A path can be relative (<code>/orders</code>), a full URL (<code>https://other-host/orders</code>), or start with a variable (<code>{{apiHost}}/orders</code>) so each tenant can hit its own server.</li>
+        <li><strong>Import</strong> (the arrow next to +): paste a cURL command (<em>Copy as cURL</em> in the browser or Postman) or choose a Postman collection v2.1 file. A preview shows each request and anything that couldn't be carried over. Bearer auth becomes the tenant token, URLs on the environment's base URL become paths, and collection variables can go into the environment.</li>
       </ul></div>
     </div>
 
     <div class="screen">
       <div class="screen-head"><h3>Tenants</h3><span class="path">/workspace/tenants</span></div>
       <div class="screen-body"><ul>
-        <li><strong>Tenants tab:</strong> a table of every client with a ready indicator and an on/off switch. Switched-off tenants stay in the plan but are skipped.</li>
+        <li><strong>Tenants tab:</strong> the clients of the current environment, with a ready indicator and an on/off switch. Switched-off tenants stay in the environment but are skipped, in every plan that uses it.</li>
         <li>Each tenant uses <strong>Login</strong> (username + password) or <strong>Bearer token</strong> (pasted).</li>
         <li><strong>Import CSV</strong> takes columns <code>client,username,password,token</code>; every other column becomes a variable.</li>
         <li><strong>Login request tab:</strong> the call made once per login tenant during preflight, and the response path of the token. Tokens are not refreshed during a run.</li>
@@ -386,9 +388,18 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
     </div>
 
     <div class="screen">
+      <div class="screen-head"><h3>Environments</h3><span class="path">/workspace/environments</span></div>
+      <div class="screen-body"><ul>
+        <li>One entry per system you test: name, base URL, shared variables and its tenants, plus the plans that use it.</li>
+        <li><strong>Duplicate with tenants</strong> copies an environment with its saved credentials, a quick start for a new system. <strong>Import Postman</strong> creates one from a Postman environment export.</li>
+        <li>An environment used by a plan can't be deleted. Switch the plan first.</li>
+      </ul></div>
+    </div>
+
+    <div class="screen">
       <div class="screen-head"><h3>Run</h3><span class="path">/workspace/run</span></div>
       <div class="screen-body"><ul>
-        <li><strong>Target:</strong> base URL, plan name and a run label (e.g. <code>release-2.4</code>) shown on saved reports.</li>
+        <li><strong>Target:</strong> environment, plan name and a run label (e.g. <code>release-2.4</code>) shown on saved reports.</li>
         <li><strong>Tenants:</strong> tick which ones take part.</li>
         <li><strong>Load profile:</strong> total duration (up to 10 minutes, ramp-up included), VUs per tenant, ramp-up, think time and timeout. The chart and the peak VU count update as you type, and the screen shows the highest request rate the setup can produce.</li>
         <li><strong>Pass criteria:</strong> a p95 limit and an error-rate limit decide the verdict.</li>
@@ -401,7 +412,7 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
       <div class="screen-body"><ul>
         <li><strong>Live:</strong> per-second throughput, p50/p95/p99 latency, error rate and active VUs, a failure breakdown, and sortable tables by request and by tenant.</li>
         <li><strong>Reports:</strong> every saved run with its verdict. Open one, export JSON or CSV, or tick two to compare them side by side.</li>
-        <li><strong>Trends:</strong> all runs of the current plan, oldest to newest, for p95, p50, p99, error rate or requests/sec, overall or per request. The pass limit shows as a dashed line; filter by run label.</li>
+        <li><strong>Trends:</strong> all runs of the current plan, oldest to newest, for p95, p50, p99, error rate or requests/sec, overall or per request. The pass limit shows as a dashed line; filter by environment (it starts on the current one) and by run label.</li>
         <li>While a run is active, a bar at the top of every screen shows progress, rate, p95, errors and a <strong>Stop</strong> button.</li>
       </ul></div>
     </div>
@@ -439,7 +450,8 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
     <p class="sub">Run a plan built in the UI from a terminal or CI job, with the same report format.</p>
 <pre><span class="p">$ </span>node service/cli.js --plan default --preflight-only   <span class="c"># just the checks</span>
 <span class="p">$ </span>node service/cli.js --plan default                   <span class="c"># full run</span>
-<span class="p">$ </span>node service/cli.js --plan default --allow-writes    <span class="c"># plan has POST/PUT/PATCH/DELETE</span></pre>
+<span class="p">$ </span>node service/cli.js --plan default --allow-writes    <span class="c"># plan has POST/PUT/PATCH/DELETE</span>
+<span class="p">$ </span>node service/cli.js --plan default --env staging     <span class="c"># another environment than the plan's</span></pre>
     <p>The CLI exits with code <code>1</code> when preflight fails or the verdict is FAIL (without pass criteria: when any call failed), so it can gate a pipeline. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops new requests and waits for calls in flight.</p>
 
     <h3>Tests</h3>
@@ -456,6 +468,7 @@ footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
       <thead><tr><th style="width:260px">File in <code>service/data/</code></th><th>Contents</th></tr></thead>
       <tbody>
         <tr><td><code>plans.json</code></td><td>All plans, without passwords or tokens.</td></tr>
+        <tr><td><code>environments.json</code></td><td>Environments: base URLs, shared variables and tenants, without passwords or tokens.</td></tr>
         <tr><td><code>secrets.json</code></td><td>Passwords and tokens, written with owner-only file permissions.</td></tr>
         <tr><td><code>report-&lt;id&gt;.json</code></td><td>One file per finished run.</td></tr>
         <tr><td><code>reports-index.json</code></td><td>Summaries used by Reports and Trends. Rebuilt automatically if missing.</td></tr>
