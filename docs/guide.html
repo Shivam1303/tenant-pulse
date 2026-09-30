@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tenant Pulse Guide</title>
+<meta name="description" content="How to install, run and use Tenant Pulse, a local multi-tenant API load tester.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --surface-2: #f3f1ee;
+  --text: #1c1b22;
+  --muted: #5f5d6b;
+  --faint: #8a8896;
+  --line: #e6e3de;
+  --accent: #6d4fe0;
+  --accent-soft: #efeafe;
+  --ok: #1f8a5b;
+  --ok-soft: #e4f5ec;
+  --warn: #a4640a;
+  --warn-soft: #fbf0dc;
+  --bad: #c2384b;
+  --code-bg: #1d1b26;
+  --code-text: #e7e4f2;
+  --shadow: 0 1px 2px rgba(20, 18, 30, .04), 0 6px 24px rgba(20, 18, 30, .05);
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f0e14; --surface: #16151d; --surface-2: #1d1c26; --text: #ecebf2; --muted: #a6a4b5; --faint: #77758a;
+    --line: #2a2835; --accent: #a28bff; --accent-soft: #231d3d; --ok: #4fcb8d; --ok-soft: #13291f;
+    --warn: #e5a94a; --warn-soft: #2d2213; --bad: #f07186; --code-bg: #0b0a10; --code-text: #e7e4f2;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.25); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f0e14; --surface: #16151d; --surface-2: #1d1c26; --text: #ecebf2; --muted: #a6a4b5; --faint: #77758a;
+  --line: #2a2835; --accent: #a28bff; --accent-soft: #231d3d; --ok: #4fcb8d; --ok-soft: #13291f;
+  --warn: #e5a94a; --warn-soft: #2d2213; --bad: #f07186; --code-bg: #0b0a10; --code-text: #e7e4f2;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.25); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+code, kbd, pre { font-family: var(--mono); font-size: .88em; }
+:not(pre) > code { background: var(--surface-2); border: 1px solid var(--line); padding: .08em .4em; border-radius: 5px; }
+kbd { background: var(--surface); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: .05em .4em; }
+
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; gap: 56px; padding: 0 32px; }
+nav.toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 40px 0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 28px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+.toc li a {
+  display: flex; gap: 10px; padding: 6px 10px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 14.5px;
+}
+.toc li a::before { counter-increment: toc; content: counter(toc, decimal-leading-zero); font: 12px/1.9 var(--mono); color: var(--faint); }
+.toc li a:hover { background: var(--surface-2); color: var(--text); }
+.theme-btn {
+  margin-top: 28px; font: 13px var(--sans); color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 10px; cursor: pointer;
+}
+
+main { padding: 56px 0 96px; min-width: 0; }
+.hero { padding-bottom: 40px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.eyebrow { font: 500 12.5px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+h1 { font-size: clamp(34px, 5vw, 48px); line-height: 1.1; letter-spacing: -.03em; margin: 12px 0 16px; font-weight: 700; }
+.lede { font-size: 19px; color: var(--muted); max-width: 64ch; margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.chip { font-size: 13px; padding: 4px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+
+section { padding-top: 48px; }
+h2 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 6px; line-height: 1.25; }
+h2 .num { font: 500 14px var(--mono); color: var(--faint); margin-right: 10px; vertical-align: 3px; }
+h3 { font-size: 17px; margin: 28px 0 8px; letter-spacing: -.01em; }
+p { margin: 0 0 14px; max-width: 72ch; }
+.sub { color: var(--muted); margin-bottom: 22px; }
+ul.clean { padding-left: 20px; margin: 0 0 14px; max-width: 72ch; }
+ul.clean li { margin: 4px 0; }
+ul.clean li::marker { color: var(--faint); }
+
+pre {
+  background: var(--code-bg); color: var(--code-text); padding: 16px 18px; border-radius: 10px; overflow-x: auto;
+  line-height: 1.6; margin: 0 0 16px; position: relative;
+}
+pre .c { color: #8c88a3; }
+pre .p { color: #a28bff; user-select: none; }
+.copy {
+  position: absolute; top: 8px; right: 8px; font: 12px var(--sans); color: #c9c5da; background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: 3px 9px; cursor: pointer; opacity: 0; transition: opacity .15s;
+}
+pre:hover .copy, .copy:focus { opacity: 1; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin: 18px 0; }
+.grid .card h4 { margin: 0 0 6px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.grid .card p { font-size: 14.5px; color: var(--muted); margin: 0; }
+.icon { width: 18px; height: 18px; color: var(--accent); flex: none; }
+
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 20px 0; }
+.steps > li { position: relative; padding: 0 0 22px 50px; }
+.steps > li::before {
+  counter-increment: step; content: counter(step); position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent); font: 600 14px/32px var(--sans); text-align: center;
+}
+.steps > li:not(:last-child)::after { content: ""; position: absolute; left: 15.5px; top: 38px; bottom: 6px; width: 1px; background: var(--line); }
+.steps > li > strong { display: block; margin-bottom: 4px; padding-top: 4px; }
+
+.callout { border-radius: 10px; padding: 14px 16px 14px 18px; margin: 18px 0; border-left: 3px solid; font-size: 15px; max-width: 76ch; }
+.callout p:last-child { margin: 0; }
+.callout.tip { background: var(--accent-soft); border-color: var(--accent); }
+.callout.warn { background: var(--warn-soft); border-color: var(--warn); }
+.callout.ok { background: var(--ok-soft); border-color: var(--ok); }
+.callout b { display: block; margin-bottom: 2px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 8px 0 18px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 14px 0 18px; }
+.table-wrap table { margin: 0; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 600; background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+
+.screen { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 22px 0; overflow: hidden; box-shadow: var(--shadow); }
+.screen-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.screen-head h3 { margin: 0; font-size: 16px; }
+.screen-head .path { margin-left: auto; font: 12.5px var(--mono); color: var(--faint); }
+.screen-body { padding: 18px 20px 6px; }
+.screen-body ul { padding-left: 20px; margin: 0 0 14px; }
+.screen-body li { margin: 5px 0; }
+
+.flow { width: 100%; height: auto; margin: 10px 0 18px; }
+.flow text { font-family: var(--sans); fill: var(--text); }
+.flow .lbl { font-size: 13px; font-weight: 600; }
+.flow .small { font-size: 11.5px; fill: var(--muted); }
+.flow .box { fill: var(--surface); stroke: var(--line); }
+.flow .box.hi { stroke: var(--accent); fill: var(--accent-soft); }
+.flow .arrow { stroke: var(--faint); fill: none; stroke-width: 1.4; }
+.flow .head { fill: var(--faint); }
+
+.pill { display: inline-block; font: 600 11.5px var(--mono); padding: 1px 7px; border-radius: 5px; vertical-align: 1px; }
+.pill.pass { background: var(--ok-soft); color: var(--ok); }
+.pill.fail { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+
+details { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 10px 0; }
+summary { cursor: pointer; padding: 13px 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; color: var(--faint); font-weight: 400; font-size: 20px; line-height: 1; }
+details[open] summary::after { content: "–"; }
+details > div { padding: 0 16px 14px; color: var(--muted); font-size: 15px; }
+details > div p { margin-bottom: 8px; }
+
+footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13.5px; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; gap: 0; padding: 0 16px; }
+  nav.toc { position: static; height: auto; padding: 24px 0 0; border-bottom: 1px solid var(--line); }
+  .toc ol { display: flex; flex-wrap: wrap; gap: 2px; padding-bottom: 16px; }
+  .toc li a { padding: 4px 8px; font-size: 13.5px; }
+  .theme-btn { display: none; }
+  main { padding-top: 32px; }
+  .screen-head .path { display: none; }
+}
+@media print {
+  nav.toc, .copy { display: none; }
+  .layout { display: block; }
+  .card, .screen { box-shadow: none; }
+  section { break-inside: avoid-page; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc" aria-label="Contents">
+  <div class="brand">
+    <span class="brand-mark"><svg class="icon" style="color:#fff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+    Tenant Pulse
+  </div>
+  <ol>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#install">Install &amp; start</a></li>
+    <li><a href="#concepts">Key ideas</a></li>
+    <li><a href="#first-run">Your first run</a></li>
+    <li><a href="#screens">Screen by screen</a></li>
+    <li><a href="#results">Reading results</a></li>
+    <li><a href="#cli">Command line</a></li>
+    <li><a href="#data">Data &amp; secrets</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+  </ol>
+  <button class="theme-btn" type="button" id="theme">Toggle theme</button>
+</nav>
+
+<main>
+  <header class="hero">
+    <div class="eyebrow">User guide</div>
+    <h1>Tenant Pulse</h1>
+    <p class="lede">A local load tester for multi-tenant APIs. It runs a collection of HTTP requests for many tenants at once, each with its own login token and variables, then reports latency percentiles, errors and a PASS or FAIL verdict.</p>
+    <div class="chips">
+      <span class="chip">Runs on your machine only</span>
+      <span class="chip">Up to 1,000 virtual users</span>
+      <span class="chip">Runs up to 10 minutes</span>
+      <span class="chip">Node.js 24 · Next.js</span>
+    </div>
+  </header>
+
+  <!-- 01 -->
+  <section id="overview">
+    <h2><span class="num">01</span>Overview</h2>
+    <p class="sub">What it does, and what happens when you press <em>Start run</em>.</p>
+
+    <div class="grid">
+      <div class="card"><h4><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>Requests</h4><p>Build the API calls to test, like a small Postman: method, path, params, headers, body.</p></div>
+      <div class="card"><h4><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Tenants</h4><p>The clients to test as. Each has its own login or token and its own values such as <code>orderId</code>.</p></div>
+      <div class="card"><h4><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Run</h4><p>Choose how many virtual users per tenant, for how long, and the limits a run must stay under to pass.</p></div>
+      <div class="card"><h4><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Results</h4><p>Live charts while it runs, saved reports afterwards, and trends across runs.</p></div>
+    </div>
+
+    <h3>What happens during a run</h3>
+    <svg class="flow" viewBox="0 0 860 150" role="img" aria-label="Run flow: save plan, preflight, ramp up, full load, report">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0 0 10 5 0 10z"/></marker></defs>
+      <g>
+        <rect class="box" x="4" y="30" width="140" height="78" rx="10"/>
+        <text class="lbl" x="74" y="62" text-anchor="middle">Save plan</text>
+        <text class="small" x="74" y="82" text-anchor="middle">edits written to disk</text>
+
+        <rect class="box hi" x="182" y="30" width="160" height="78" rx="10"/>
+        <text class="lbl" x="262" y="62" text-anchor="middle">Preflight</text>
+        <text class="small" x="262" y="82" text-anchor="middle">each tenant logs in,</text>
+        <text class="small" x="262" y="97" text-anchor="middle">calls every request once</text>
+
+        <rect class="box" x="380" y="30" width="140" height="78" rx="10"/>
+        <text class="lbl" x="450" y="62" text-anchor="middle">Ramp-up</text>
+        <text class="small" x="450" y="82" text-anchor="middle">VUs start evenly</text>
+
+        <rect class="box" x="558" y="30" width="140" height="78" rx="10"/>
+        <text class="lbl" x="628" y="62" text-anchor="middle">Full load</text>
+        <text class="small" x="628" y="82" text-anchor="middle">live stats every second</text>
+
+        <rect class="box" x="736" y="30" width="120" height="78" rx="10"/>
+        <text class="lbl" x="796" y="62" text-anchor="middle">Report</text>
+        <text class="small" x="796" y="82" text-anchor="middle">PASS / FAIL</text>
+
+        <path class="arrow" d="M146 69h32" marker-end="url(#ah)"/>
+        <path class="arrow" d="M344 69h32" marker-end="url(#ah)"/>
+        <path class="arrow" d="M522 69h32" marker-end="url(#ah)"/>
+        <path class="arrow" d="M700 69h32" marker-end="url(#ah)"/>
+        <path class="arrow" d="M262 110v22h-0" />
+        <text class="small" x="262" y="146" text-anchor="middle">any failure → run stops before load starts</text>
+      </g>
+    </svg>
+    <p>Preflight is a safety net: if a login fails or a request returns an error for any tenant, no load is sent and you see exactly which tenant and request failed.</p>
+  </section>
+
+  <!-- 02 -->
+  <section id="install">
+    <h2><span class="num">02</span>Install &amp; start</h2>
+    <p class="sub">About five minutes on a fresh machine.</p>
+
+    <h3>You need</h3>
+    <ul class="clean">
+      <li><strong>Node.js 24</strong> (20.9 or later also works). The easiest route is <a href="https://github.com/nvm-sh/nvm">nvm</a>; the repo has an <code>.nvmrc</code>.</li>
+      <li>Git, and network access to the API you want to test.</li>
+      <li>Optional: the <code>mysql</code> command-line client, only if you want the MySQL connection panel.</li>
+    </ul>
+
+    <ol class="steps">
+      <li><strong>Get the code</strong>
+<pre><span class="p">$ </span>git clone git@github.com:Shivam1303/tenant-pulse.git
+<span class="p">$ </span>cd tenant-pulse</pre></li>
+      <li><strong>Start it</strong>
+        <p>The script switches to Node 24, installs the web dependencies the first time, and starts both the API service and the web app.</p>
+<pre><span class="p">$ </span>./run.sh          <span class="c"># development mode, hot reload</span>
+<span class="p">$ </span>./run.sh prod     <span class="c"># optimised build, then start</span></pre></li>
+      <li><strong>Open the app</strong>
+        <p>Go to <a href="http://127.0.0.1:3000">http://127.0.0.1:3000</a>. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop both processes.</p></li>
+    </ol>
+
+    <details>
+      <summary>Prefer to run the steps yourself?</summary>
+      <div>
+<pre><span class="p">$ </span>nvm use
+<span class="p">$ </span>npm --prefix web install
+<span class="p">$ </span>npm run build
+<span class="p">$ </span>npm start        <span class="c"># or: npm run dev</span></pre>
+      </div>
+    </details>
+
+    <details>
+      <summary>Using different ports</summary>
+      <div>
+        <p>The web app uses port <code>3000</code> and the API service <code>4174</code>. Change them with environment variables:</p>
+<pre><span class="p">$ </span>WEB_PORT=3200 API_PORT=4300 ./run.sh prod</pre>
+        <p>For a production build, <code>API_PORT</code> must be set when building as well as when starting, because the web app's proxy target is fixed at build time.</p>
+      </div>
+    </details>
+
+    <div class="callout tip"><b>Local only</b><p>Both processes listen on <code>127.0.0.1</code> and reject requests from other hosts, so the app is not reachable from the network. Everyone who uses it runs their own copy.</p></div>
+  </section>
+
+  <!-- 03 -->
+  <section id="concepts">
+    <h2><span class="num">03</span>Key ideas</h2>
+    <p class="sub">Five terms that explain everything else in the app.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th style="width:170px">Term</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Plan</strong></td><td>Everything for one test: base URL, requests, tenants, login request, load settings and pass criteria. Pick or create plans from the menu at the top.</td></tr>
+        <tr><td><strong>Tenant</strong></td><td>One client of your API. It has a client number, and either a username and password (the app logs in for it) or a pasted bearer token, plus its own variables.</td></tr>
+        <tr><td><strong>Virtual user (VU)</strong></td><td>A simulated person. Each VU calls a request, pauses, then calls the next one, looping through all enabled requests in order. Total VUs = tenants × VUs per tenant, capped at 1,000.</td></tr>
+        <tr><td><strong>Think time</strong></td><td>The pause after each call, like a user reading the screen. It varies by ±50% so users drift apart. With 0 think time, every VU sends requests as fast as the API answers.</td></tr>
+        <tr><td><strong>p50 / p95 / p99</strong></td><td>Latency percentiles. p95 = 250 ms means 95% of calls finished within 250 ms. p95 is the usual number to watch.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Variables</h3>
+    <p>Write <code>{{name}}</code> anywhere in a path, query value, header or body, and each tenant fills in its own value. These are always available:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th style="width:170px">Variable</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code>{{token}}</code></td><td>The tenant's bearer token, from the login request or pasted in.</td></tr>
+        <tr><td><code>{{client}}</code></td><td>The tenant's client number.</td></tr>
+        <tr><td><code>{{username}}</code></td><td>The tenant's username.</td></tr>
+        <tr><td><code>{{baseUrl}}</code></td><td>The plan's base URL.</td></tr>
+        <tr><td><code>{{password}}</code></td><td>Only inside the login request.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Anything else, such as <code>{{orderId}}</code>, is a tenant variable. When a request uses it, a matching field appears on every tenant automatically. Values are escaped for JSON bodies and URL-encoded in paths, so you never need to quote them yourself.</p>
+  </section>
+
+  <!-- 04 -->
+  <section id="first-run">
+    <h2><span class="num">04</span>Your first run</h2>
+    <p class="sub">From an empty plan to a report.</p>
+
+    <ol class="steps">
+      <li><strong>Set the base URL</strong><p>On <em>Requests</em>, enter the API origin at the top of the collection, for example <code>https://api.staging.example.com</code>.</p></li>
+      <li><strong>Add and try a request</strong><p>Add a request (e.g. <code>GET /products</code>), pick a tenant in the response panel and click <strong>Send</strong>. It calls the API once with your unsaved edits so you can check the response before running load.</p></li>
+      <li><strong>Add tenants</strong><p>On <em>Tenants</em>, add each client with its login or token and fill in any variables. Each row shows whether that tenant is ready. Many tenants? Use <strong>Import CSV</strong>.</p></li>
+      <li><strong>Check the login request</strong><p>On the <em>Login request</em> tab, confirm the endpoint and where the token sits in the response (e.g. <code>token</code> or <code>data.accessToken</code>). Then open a tenant and click <strong>Test login</strong> (or <strong>Check token</strong> for token tenants).</p></li>
+      <li><strong>Choose the load</strong><p>On <em>Run</em>, start small: 2 VUs per tenant, 30 s ramp-up, 2 minutes total, 1000 ms think time. Set pass criteria, e.g. p95 under 500 ms and errors under 1%.</p></li>
+      <li><strong>Check, then start</strong><p>Click <strong>Check only</strong> to run just the preflight. When it passes, click <strong>Start run</strong> and watch <em>Results → Live</em>.</p></li>
+    </ol>
+
+    <div class="callout warn"><b>Write requests change data</b><p>POST, PUT, PATCH and DELETE requests need an explicit confirmation before Send, preflight or a run, because they can create or delete real records. Point them at a test environment.</p></div>
+  </section>
+
+  <!-- 05 -->
+  <section id="screens">
+    <h2><span class="num">05</span>Screen by screen</h2>
+    <p class="sub">The four screens in the left sidebar.</p>
+
+    <div class="screen">
+      <div class="screen-head"><h3>Requests</h3><span class="path">/workspace/requests</span></div>
+      <div class="screen-body"><ul>
+        <li>Three panes: the collection, the request editor and the response.</li>
+        <li>The switch next to each request includes it in or leaves it out of the run.</li>
+        <li>Editor tabs: <strong>Params</strong>, <strong>Headers</strong>, <strong>Body</strong> (JSON, text or form) and <strong>Auth</strong>. <em>Tenant bearer token</em> sends <code>Authorization: Bearer {{token}}</code>.</li>
+        <li>A path can be relative (<code>/orders</code>), a full URL (<code>https://other-host/orders</code>), or start with a variable (<code>{{apiHost}}/orders</code>) so each tenant can hit its own server.</li>
+      </ul></div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-head"><h3>Tenants</h3><span class="path">/workspace/tenants</span></div>
+      <div class="screen-body"><ul>
+        <li><strong>Tenants tab:</strong> a table of every client with a ready indicator and an on/off switch. Switched-off tenants stay in the plan but are skipped.</li>
+        <li>Each tenant uses <strong>Login</strong> (username + password) or <strong>Bearer token</strong> (pasted).</li>
+        <li><strong>Import CSV</strong> takes columns <code>client,username,password,token</code>; every other column becomes a variable.</li>
+        <li><strong>Login request tab:</strong> the call made once per login tenant during preflight, and the response path of the token. Tokens are not refreshed during a run.</li>
+      </ul>
+<pre>client,username,password,token,orderId,departmentId
+1001,loadtest,secret,,58213,4
+1002,,,eyJhbGciOi...,77120,2</pre>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-head"><h3>Run</h3><span class="path">/workspace/run</span></div>
+      <div class="screen-body"><ul>
+        <li><strong>Target:</strong> base URL, plan name and a run label (e.g. <code>release-2.4</code>) shown on saved reports.</li>
+        <li><strong>Tenants:</strong> tick which ones take part.</li>
+        <li><strong>Load profile:</strong> total duration (up to 10 minutes, ramp-up included), VUs per tenant, ramp-up, think time and timeout. The chart and the peak VU count update as you type, and the screen shows the highest request rate the setup can produce.</li>
+        <li><strong>Pass criteria:</strong> a p95 limit and an error-rate limit decide the verdict.</li>
+        <li><strong>Start run</strong> saves, runs preflight, then starts the load. <strong>Check only</strong> runs just the preflight.</li>
+      </ul></div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-head"><h3>Results</h3><span class="path">/workspace/results</span></div>
+      <div class="screen-body"><ul>
+        <li><strong>Live:</strong> per-second throughput, p50/p95/p99 latency, error rate and active VUs, a failure breakdown, and sortable tables by request and by tenant.</li>
+        <li><strong>Reports:</strong> every saved run with its verdict. Open one, export JSON or CSV, or tick two to compare them side by side.</li>
+        <li><strong>Trends:</strong> all runs of the current plan, oldest to newest, for p95, p50, p99, error rate or requests/sec, overall or per request. The pass limit shows as a dashed line; filter by run label.</li>
+        <li>While a run is active, a bar at the top of every screen shows progress, rate, p95, errors and a <strong>Stop</strong> button.</li>
+      </ul></div>
+    </div>
+
+    <p>Unsaved edits are marked in the top bar. Save with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd>. Switching plans or closing the tab with unsaved edits asks first.</p>
+  </section>
+
+  <!-- 06 -->
+  <section id="results">
+    <h2><span class="num">06</span>Reading results</h2>
+    <p class="sub">How to tell whether the API held up, and whether to trust the numbers.</p>
+
+    <div class="grid">
+      <div class="card"><h4><span class="pill pass">PASS</span></h4><p>p95 stayed under the limit and the error rate stayed under its limit for the whole run.</p></div>
+      <div class="card"><h4><span class="pill fail">FAIL</span></h4><p>At least one limit was exceeded. The report says which one.</p></div>
+      <div class="card"><h4>What counts as an error</h4><p>Any non-2xx status, timeout or network error. With the success-field check on, a 2xx body with <code>"success": false</code> also counts.</p></div>
+    </div>
+
+    <h3>Things to watch</h3>
+    <ul class="clean">
+      <li><strong>Rising p95 while VUs ramp up</strong> usually means the API or database is reaching its limit.</li>
+      <li><strong>Errors concentrated on one tenant</strong> (tenant table) point to data or permissions for that client, not general load.</li>
+      <li><strong>Many 401s</strong> mean a token expired or was rejected. Tokens are not refreshed mid-run.</li>
+    </ul>
+
+    <div class="callout warn"><b>When the tester itself is the bottleneck</b><p>All VUs run in one Node process. At high VU counts or with 0 think time, your own machine can fall behind. The live view warns about this (event-loop lag). When it does, the latencies include the tool's own delay, so reduce VUs or add think time.</p></div>
+
+    <h3>MySQL panel (optional)</h3>
+    <p>Add a MySQL host to sample <code>Threads_connected</code> and <code>Threads_running</code> once per second during the run, using the installed <code>mysql</code> client. The user only needs permission to read global status. Without a host, the panel shows <em>Not measured</em>.</p>
+  </section>
+
+  <!-- 07 -->
+  <section id="cli">
+    <h2><span class="num">07</span>Command line</h2>
+    <p class="sub">Run a plan built in the UI from a terminal or CI job, with the same report format.</p>
+<pre><span class="p">$ </span>node service/cli.js --plan default --preflight-only   <span class="c"># just the checks</span>
+<span class="p">$ </span>node service/cli.js --plan default                   <span class="c"># full run</span>
+<span class="p">$ </span>node service/cli.js --plan default --allow-writes    <span class="c"># plan has POST/PUT/PATCH/DELETE</span></pre>
+    <p>The CLI exits with code <code>1</code> when preflight fails or the verdict is FAIL (without pass criteria: when any call failed), so it can gate a pipeline. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops new requests and waits for calls in flight.</p>
+
+    <h3>Tests</h3>
+<pre><span class="p">$ </span>npm test</pre>
+    <p>Runs the engine and API routes against a built-in mock API, using a temporary data folder. Your saved plans are not touched.</p>
+  </section>
+
+  <!-- 08 -->
+  <section id="data">
+    <h2><span class="num">08</span>Data &amp; secrets</h2>
+    <p class="sub">Where things are stored, and what never leaves your machine.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th style="width:260px">File in <code>service/data/</code></th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td><code>plans.json</code></td><td>All plans, without passwords or tokens.</td></tr>
+        <tr><td><code>secrets.json</code></td><td>Passwords and tokens, written with owner-only file permissions.</td></tr>
+        <tr><td><code>report-&lt;id&gt;.json</code></td><td>One file per finished run.</td></tr>
+        <tr><td><code>reports-index.json</code></td><td>Summaries used by Reports and Trends. Rebuilt automatically if missing.</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="callout ok"><b>Secrets stay local</b><p>The browser never receives saved passwords or tokens; it only sees that one is set. Leaving a password field blank keeps the saved value. Reports and exports exclude passwords, tokens and authorization headers. The data folder is ignored by Git.</p></div>
+    <p>To move plans to another machine, copy <code>service/data/</code>. To start fresh, stop the app and delete that folder.</p>
+  </section>
+
+  <!-- 09 -->
+  <section id="troubleshooting">
+    <h2><span class="num">09</span>Troubleshooting</h2>
+    <p class="sub">Common problems and fixes.</p>
+
+    <details>
+      <summary><code>nvm not found</code> when running <code>./run.sh</code></summary>
+      <div><p>Install nvm, or set <code>NVM_DIR</code> to where it is installed. Alternatively, use Node 24 another way and run <code>npm run dev</code>.</p></div>
+    </details>
+    <details>
+      <summary>Syntax errors or odd failures on start</summary>
+      <div><p>You are probably on an old Node. Check with <code>node -v</code>; it must be 20.9 or later (24 recommended). Run <code>nvm use</code> in the project folder.</p></div>
+    </details>
+    <details>
+      <summary>Port 3000 or 4174 already in use</summary>
+      <div><p>Another copy is running, or another app has the port. Stop it, or start with other ports: <code>WEB_PORT=3200 API_PORT=4300 ./run.sh</code>.</p></div>
+    </details>
+    <details>
+      <summary>Preflight fails for a tenant</summary>
+      <div><p>The failure list names the tenant, the request and the status. Try that tenant with <strong>Send</strong> on Requests, or <strong>Test login</strong> on that tenant. Common causes: wrong password, a token path that doesn't match the response, or a missing variable.</p></div>
+    </details>
+    <details>
+      <summary>“A check or run is already active.”</summary>
+      <div><p>Only one preflight or run can happen at a time. Wait for it to finish or click <strong>Stop</strong> in the run bar.</p></div>
+    </details>
+    <details>
+      <summary>Many 401 errors partway through a run</summary>
+      <div><p>Tokens are fetched once in preflight and not refreshed. If they expire during the run, calls fail with 401. Use a shorter run or longer-lived tokens.</p></div>
+    </details>
+    <details>
+      <summary>Web app shows errors after changing <code>API_PORT</code> in production</summary>
+      <div><p>The production build fixes the API port when it is built. Rebuild with the new port: <code>API_PORT=4300 ./run.sh prod</code>.</p></div>
+    </details>
+
+    <footer>Tenant Pulse · local multi-tenant API load testing · Limits: 1,000 VUs, 100 tenants per plan, 10-minute runs.</footer>
+  </section>
+</main>
+</div>
+
+<script>
+document.querySelectorAll("pre").forEach((pre) => {
+  const btn = document.createElement("button");
+  btn.className = "copy"; btn.type = "button"; btn.textContent = "Copy";
+  btn.addEventListener("click", async () => {
+    const text = [...pre.childNodes].filter((n) => n !== btn).map((n) => n.textContent).join("")
+      .split("\n").map((l) => l.replace(/^\$ /, "").replace(/\s+#.*$/, "")).join("\n").trim();
+    try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; } catch { btn.textContent = "Select & copy"; }
+    setTimeout(() => (btn.textContent = "Copy"), 1400);
+  });
+  pre.appendChild(btn);
+});
+const root = document.documentElement;
+try { const t = localStorage.getItem("tp-theme"); if (t) root.dataset.theme = t; } catch {}
+document.getElementById("theme").addEventListener("click", () => {
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("tp-theme", root.dataset.theme); } catch {}
+});
+</script>
+</body>
+</html>
