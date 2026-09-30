@@ -6,6 +6,7 @@ const path = require("path");
 const store = require("./store");
 const { Run, preflight, tryRequest, testLogin } = require("./engine");
 const schema = require("./schema");
+const { importText } = require("./importer");
 
 const port = Number(process.env.API_PORT || 4174);
 const webPort = Number(process.env.WEB_PORT || 3000);
@@ -189,6 +190,17 @@ const routes = [
       const copy = store.duplicateEnvironment(id);
       if (!copy) throw httpError(404, "Environment not found.");
       return copy;
+    },
+  ],
+  [
+    "POST",
+    "/api/import",
+    (_, body) => {
+      try {
+        return importText(body.text, typeof body.baseUrl === "string" ? body.baseUrl : "");
+      } catch (error) {
+        throw httpError(400, error.message, { field: "text" });
+      }
     },
   ],
   [

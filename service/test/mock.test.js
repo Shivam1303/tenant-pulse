@@ -12,6 +12,7 @@ process.env.API_PORT = "4999";
 
 const { newPlan } = require("../defaults");
 const { validatePlan, validateEnvironment, resolveRun, validateRequest } = require("../schema");
+const { importText } = require("../importer");
 const { preflight, tryRequest, testLogin, Run } = require("../engine");
 const stats = require("../stats");
 
@@ -352,6 +353,14 @@ async function testRoutes(report) {
     assert.strictEqual(draft.status, 200);
     assert.match(draft.data.detail, /connection|network/, "uses the saved password and tries to log in");
 
+    // Import previews requests without saving anything.
+    const imported = await call("POST", "/api/import", {
+      text: "curl -X POST 'http://localhost:8080/orders?id=5' -H 'Authorization: Bearer abc' --data-raw '{\"a\":1}'",
+      baseUrl: "http://localhost:8080",
+    });
+    assert.strictEqual(imported.status, 200, JSON.stringify(imported.data));
+    assert.strictEqual(imported.data.requests[0].request.path, "/orders");
+    assert.strictEqual((await call("POST", "/api/import", { text: "wget x" })).status, 400);
     assert.deepStrictEqual((await call("GET", "/api/reports")).data, []);
     // The index keeps per-request numbers for trends, and old indexes are rebuilt.
     const store = require("../store");
@@ -405,15 +414,115 @@ function testMigration(store) {
   assert.strictEqual(fs.readFileSync(path.join(dir, "environments.json"), "utf8"), before);
 }
 
+function testImport() {
+  // cURL as Chrome copies it: continuations, quotes, headers, JSON body.
+  const curl = importText(
+    `curl 'http://localhost:8080/orders/fetch-order-list?page_size=50&departmentId=%7B%7BdepartmentId%7D%7D' \\
+  -H 'accept: application/json' \\
+  -H 'authorization: Bearer eyJabc' \\
+  -H 'content-type: application/json' \\
+  --data-raw $'{"note":"it\\'s"}' \\
+  --compressed -sSL`,
+    "http://localhost:8080",
+  );
+  const c = curl.requests[0];
+  assert.strictEqual(c.error, undefined, c.error);
+  assert.strictEqual(c.request.method, "POST");
+  assert.strictEqual(c.request.path, "/orders/fetch-order-list");
+  assert.deepStrictEqual(c.request.query.map((q) => [q.key, q.value]), [["page_size", "50"], ["departmentId", "{{departmentId}}"]]);
+  assert.strictEqual(c.request.authMode, "tenantBearer");
+  assert.strictEqual(c.request.bodyType, "json");
+  assert.strictEqual(JSON.parse(c.request.body).note, "it's");
+  assert.deepStrictEqual(c.request.headers.map((h) => h.key), ["accept"]);
+  assert(c.warnings.some((w) => /tenant's token/.test(w)));
+  const other = importText("curl -G https://other.host/x -d q=1 -u a:b", "http://localhost:8080").requests[0];
+  assert.strictEqual(other.request.path, "https://other.host/x", "other hosts stay full URLs");
+  assert.strictEqual(other.request.method, "GET");
+  assert.deepStrictEqual(other.request.query[0], { key: "q", value: "1", enabled: true });
+  assert.strictEqual(other.request.authMode, "none");
+  assert(other.warnings.some((w) => /basic auth/.test(w)));
+  assert.throws(() => importText("curl 'unterminated", ""), /not closed/);
+
+  // Postman v2.1: folders, inherited bearer auth, path variables, bodies.
+  const collection = {
+    info: { name: "Duell", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+    auth: { type: "bearer", bearer: [{ key: "token", value: "{{token}}" }] },
+    variable: [
+      { key: "baseUrl", value: "http://localhost:8080/api" },
+      { key: "posId", value: "560" },
+      { key: "token", value: "x" },
+    ],
+    event: [{ listen: "prerequest", script: { exec: ["pm.environment.set('a', 1)"] } }],
+    item: [
+      {
+        name: "Orders",
+        item: [
+          {
+            name: "Order list",
+            request: {
+              method: "GET",
+              url: {
+                raw: "{{baseUrl}}/orders/:kind?page_size=50&off=1",
+                host: ["{{baseUrl}}"],
+                path: ["orders", ":kind"],
+                query: [
+                  { key: "page_size", value: "50" },
+                  { key: "off", value: "1", disabled: true },
+                ],
+                variable: [{ key: "kind", value: "" }],
+              },
+            },
+          },
+          {
+            name: "Create",
+            request: {
+              method: "POST",
+              auth: { type: "noauth" },
+              header: [{ key: "Content-Type", value: "application/json" }],
+              body: { mode: "raw", raw: '{"posId": {{posId}}}', options: { raw: { language: "json" } } },
+              url: "{{baseUrl}}/orders",
+            },
+          },
+        ],
+      },
+      { name: "Login", request: { method: "POST", url: "https://auth.other/login", body: { mode: "urlencoded", urlencoded: [{ key: "u", value: "{{username}}" }] } } },
+    ],
+  };
+  const pm = importText(JSON.stringify(collection), "http://localhost:8080");
+  assert.strictEqual(pm.kind, "postman");
+  assert.deepStrictEqual(pm.requests.map((r) => r.request.name), ["Orders / Order list", "Orders / Create", "Login"]);
+  const [list, create, login] = pm.requests.map((r) => r.request);
+  assert.strictEqual(list.path, "/api/orders/{{kind}}", "path from {{baseUrl}} with its /api prefix");
+  assert.deepStrictEqual(list.query.map((q) => q.enabled), [true, false]);
+  assert.strictEqual(list.authMode, "tenantBearer", "inherits the collection's bearer auth");
+  assert.strictEqual(create.authMode, "none");
+  assert.strictEqual(create.bodyType, "json");
+  assert.strictEqual(create.body, '{"posId": {{posId}}}');
+  assert.strictEqual(login.bodyType, "form");
+  assert.strictEqual(login.path, "https://auth.other/login");
+  assert.deepStrictEqual(pm.environment, { name: "Duell", baseUrl: "http://localhost:8080", variables: { posId: "560" } });
+  assert(pm.warnings.some((w) => /scripts/.test(w)));
+  assert(pm.warnings.some((w) => /\{\{token\}\}/.test(w)));
+
+  const pmEnv = importText(
+    JSON.stringify({ name: "Staging", _postman_variable_scope: "environment", values: [{ key: "baseUrl", value: "https://staging.x", enabled: true }, { key: "departmentId", value: "1", enabled: true }] }),
+    "",
+  );
+  assert.strictEqual(pmEnv.kind, "postman-environment");
+  assert.deepStrictEqual(pmEnv.environment, { name: "Staging", baseUrl: "https://staging.x", variables: { departmentId: "1" } });
+  assert.throws(() => importText('{"foo":1}', ""), /Unknown JSON/);
+}
+
 async function main() {
   testStats();
+  testImport();
   const { server, seen } = mockApi();
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const report = await testEngine(`http://127.0.0.1:${server.address().port}`, seen);
     await testRoutes(report);
     console.log(
-      `Mock API: ${report.targetVUs} VUs, ${report.overall.total} calls, tenants isolated, environments, migration, login, thresholds, routes and stats checked.`,
+      `Mock API: ${report.targetVUs} VUs, ${report.overall.total} calls, tenants isolated, environments, migration, import, login, thresholds, routes and stats checked.`,
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
