@@ -46,19 +46,31 @@ export type Settings = {
   checkSuccessField: boolean;
 };
 export type Thresholds = { p95Ms: number | null; errorRatePct: number | null };
+// What to call and how hard. Where to call it comes from its environment.
 export type Plan = {
   id: string;
   name: string;
   label: string;
-  baseUrl: string;
+  environmentId: string;
   settings: Settings;
   thresholds: Thresholds;
   login: LoginSpec;
-  tenants: Tenant[];
   requests: RequestSpec[];
   mysql: MysqlHost[];
 };
 export type PlanSummary = { id: string; name: string };
+// A target system: its base URL, variables shared by its tenants, and the
+// tenants (accounts) that exist there.
+export type Environment = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  variables: Record<string, string>;
+  tenants: Tenant[];
+  // Plans that run against it (read-only, from the service).
+  plans?: PlanSummary[];
+};
+export type EnvironmentRef = { id: string; name: string } | null;
 export type Notice = {
   type: "error" | "success" | "info";
   text: string;
@@ -108,6 +120,7 @@ export type Live = {
   id?: string;
   planId?: string;
   planName?: string;
+  environment?: EnvironmentRef;
   state: RunState;
   error?: string;
   activeVUs?: number;
@@ -129,6 +142,7 @@ export type Live = {
 export type Report = {
   id: string;
   planId?: string;
+  environment?: EnvironmentRef;
   name: string;
   label: string;
   apiHost: string;
@@ -155,6 +169,7 @@ export type ReportSummary = Pick<
   "id" | "name" | "label" | "startedAt" | "elapsedSeconds" | "targetVUs" | "stopped" | "overall" | "rate"
 > & {
   planId?: string;
+  environment?: EnvironmentRef;
   verdict?: Verdict;
   byRequest?: Record<string, Pick<Stats, "total" | "failed" | "p50Ms" | "p95Ms" | "p99Ms">>;
 };

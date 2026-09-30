@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ChevronRight, Database, Loader2, Play, Plus, ShieldCheck, Trash2, XCircle } from "lucide-react";
 import { useWorkspace } from "../../../components/workspace-provider";
@@ -9,7 +10,7 @@ import { Field } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { duration, num } from "../../../lib/format";
 import { MAX_RUN_SECONDS, MAX_VUS, inRun, tenantProblems, unsafeMethods } from "../../../lib/plan";
-import type { MysqlHost, Plan, PreflightRow, Settings, Thresholds } from "../../../lib/types";
+import type { Environment, MysqlHost, Plan, PreflightRow, Settings, Thresholds } from "../../../lib/types";
 
 function NumberInput({
   id,
@@ -118,29 +119,31 @@ function PreflightTable({ rows, title }: { rows: PreflightRow[]; title: string }
   );
 }
 
-// Choose which tenants take part; the rest stay in the plan, switched off.
-function TenantPicker({ plan }: { plan: Plan }) {
-  const { updatePlan } = useWorkspace();
+// Choose which tenants take part; the rest stay in the environment, switched off.
+function TenantPicker({ plan, env }: { plan: Plan; env: Environment }) {
+  const { updateEnv } = useWorkspace();
+  const tenants = env.tenants;
   const setAll = (enabled: boolean) =>
-    updatePlan((c) => ({ ...c, tenants: c.tenants.map((t) => ({ ...t, enabled })) }));
+    updateEnv((c) => ({ ...c, tenants: c.tenants.map((t) => ({ ...t, enabled })) }));
   const toggle = (index: number) =>
-    updatePlan((c) => ({
+    updateEnv((c) => ({
       ...c,
       tenants: c.tenants.map((t, i) => (i === index ? { ...t, enabled: t.enabled === false } : t)),
     }));
-  const on = inRun(plan).length;
+  const on = inRun(env).length;
   return (
     <section className="card">
       <div className="card-head">
         <div>
           <h2>Tenants</h2>
           <p>
-            {on} of {plan.tenants.length} in this run. Switched-off tenants are kept but skipped.
+            {on} of {tenants.length} in {env.name} switched on. Switched-off tenants are kept but skipped, in every plan
+            that uses {env.name}.
           </p>
         </div>
-        {plan.tenants.length ? (
+        {tenants.length ? (
           <div className="page-actions">
-            <button className="btn ghost sm" onClick={() => setAll(true)} disabled={on === plan.tenants.length}>
+            <button className="btn ghost sm" onClick={() => setAll(true)} disabled={on === tenants.length}>
               All
             </button>
             <button className="btn ghost sm" onClick={() => setAll(false)} disabled={!on}>
@@ -150,10 +153,10 @@ function TenantPicker({ plan }: { plan: Plan }) {
         ) : null}
       </div>
       <div className="card-body">
-        {plan.tenants.length ? (
+        {tenants.length ? (
           <div className="tenant-chips">
-            {plan.tenants.map((t, i) => {
-              const p = tenantProblems(plan, t);
+            {tenants.map((t, i) => {
+              const p = tenantProblems(plan, env, t);
               const ready = t.client && !p.auth && !p.missing.length;
               const onRun = t.enabled !== false;
               return (
@@ -166,7 +169,7 @@ function TenantPicker({ plan }: { plan: Plan }) {
             })}
           </div>
         ) : (
-          <p className="muted small">No tenants yet. Add them on the Tenants screen.</p>
+          <p className="muted small">No tenants in {env.name} yet. Add them on the Tenants screen.</p>
         )}
       </div>
     </section>
@@ -240,7 +243,7 @@ function MysqlHosts({ plan }: { plan: Plan }) {
 }
 
 export default function RunPage() {
-  const { plan, updatePlan, save, dirty, setNotice } = useWorkspace();
+  const { plan, env, environments, updatePlan, selectEnvironment, save, dirty, setNotice } = useWorkspace();
   const { live, active, refresh } = useLive();
   const router = useRouter();
   const [busy, setBusy] = useState<"check" | "start" | null>(null);
@@ -260,10 +263,10 @@ export default function RunPage() {
     }
   }, [live, router]);
 
-  if (!plan) return null;
+  if (!plan || !env) return null;
   const s = plan.settings;
   const t = plan.thresholds;
-  const running = inRun(plan);
+  const running = inRun(env);
   const totalVUs = running.length * Number(s.vusPerTenant || 0);
   const ramp = s.rampUpSeconds || 0;
   const total = ramp + (s.durationSeconds || 0);
@@ -351,17 +354,33 @@ export default function RunPage() {
             <div className="card-head">
               <div>
                 <h2>Target</h2>
-                <p>The API every tenant calls, and how reports are named.</p>
+                <p>The environment every tenant calls, and how reports are named.</p>
               </div>
             </div>
             <div className="card-body form-grid">
-              <Field label="API base URL" htmlFor="base-url" className="full" hint="Origin only, e.g. https://api.example.com">
-                <input
-                  id="base-url"
-                  className="input mono"
-                  value={plan.baseUrl}
-                  onChange={(e) => updatePlan((c) => ({ ...c, baseUrl: e.target.value }))}
-                />
+              <Field
+                label="Environment"
+                htmlFor="run-env"
+                className="full"
+                hint={
+                  <>
+                    Calls <code>{env.baseUrl}</code> with the {env.tenants.length} tenant{env.tenants.length === 1 ? "" : "s"}{" "}
+                    of {env.name}. <Link href="/workspace/environments">Manage environments</Link>
+                  </>
+                }
+              >
+                <select
+                  id="run-env"
+                  className="select"
+                  value={env.id}
+                  onChange={(e) => selectEnvironment(e.target.value)}
+                >
+                  {environments.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} · {e.baseUrl.replace(/^https?:\/\//, "")}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Plan name" htmlFor="plan-name">
                 <input
@@ -383,7 +402,7 @@ export default function RunPage() {
             </div>
           </section>
 
-          <TenantPicker plan={plan} />
+          <TenantPicker plan={plan} env={env} />
 
           <section className="card">
             <div className="card-head">
@@ -517,10 +536,14 @@ export default function RunPage() {
             <div className="card-body stack">
               <div className="summary-rows num">
                 <div>
+                  <span>Environment</span>
+                  <strong>{env.name}</strong>
+                </div>
+                <div>
                   <span>Tenants in the run</span>
                   <strong>
                     {running.length}
-                    {running.length !== plan.tenants.length ? <span className="faint"> of {plan.tenants.length}</span> : null}
+                    {running.length !== env.tenants.length ? <span className="faint"> of {env.tenants.length}</span> : null}
                   </strong>
                 </div>
                 <div>
@@ -538,7 +561,8 @@ export default function RunPage() {
               </div>
               {!running.length ? (
                 <div className="callout warning">
-                  <AlertTriangle /> {plan.tenants.length ? "Switch on at least one tenant." : "Add at least one tenant first."}
+                  <AlertTriangle />{" "}
+                  {env.tenants.length ? "Switch on at least one tenant." : `Add at least one tenant to ${env.name} first.`}
                 </div>
               ) : null}
               {hasWrites ? (
@@ -546,7 +570,7 @@ export default function RunPage() {
                   <input type="checkbox" checked={allowWrites} onChange={(e) => setAllowWrites(e.target.checked)} />
                   <span>
                     I understand the enabled {enabled.filter((r) => unsafeMethods.has(r.method)).map((r) => r.method).join("/")}{" "}
-                    requests can change data on <code>{plan.baseUrl}</code>.
+                    requests can change data on <code>{env.baseUrl}</code> ({env.name}).
                   </span>
                 </label>
               ) : null}

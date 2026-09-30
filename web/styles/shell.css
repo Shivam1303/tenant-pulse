@@ -282,3 +282,32 @@
     padding: 6px 12px;
   }
 }
+
+/* Environment switcher next to the plan picker */
+.env-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+}
+.env-picker svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.plan-picker .env-picker .select {
+  min-width: 0;
+  max-width: 220px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.run-bar-plan .env-tag {
+  margin-left: 6px;
+}
+@media (max-width: 720px) {
+  .env-picker .select {
+    max-width: 30vw;
+  }
+}

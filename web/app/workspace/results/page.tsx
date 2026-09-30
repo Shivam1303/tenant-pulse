@@ -387,6 +387,7 @@ function LiveTab() {
           <div className="run-title">
             <span className={`dot ${live.state}`} />
             <h1>{live.planName}</h1>
+            {live.environment ? <span className="env-tag">{live.environment.name}</span> : null}
             <VerdictBadge verdict={live.state === "finished" ? live.verdict : null} />
           </div>
           <p className="muted small num">
@@ -547,6 +548,12 @@ function ReportDetail({ report, onBack, backLabel }: { report: Report; onBack: (
           <p className="muted small num">
             {dateTime(report.startedAt)} · {duration(report.elapsedSeconds)} · {report.targetVUs} VUs ·{" "}
             {report.tenants.length} tenants · {report.apiHost}
+            {report.environment ? (
+              <>
+                {" "}
+                <span className="env-tag">{report.environment.name}</span>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="page-actions">
@@ -583,12 +590,14 @@ function metricOf(s: TrendStats | undefined, metric: TrendMetric, seconds: numbe
 
 // One point per saved run of the current plan, oldest on the left.
 function TrendsTab() {
-  const { plan, setNotice } = useWorkspace();
+  const { plan, env, environments, setNotice } = useWorkspace();
   const { finishedCount } = useLive();
   const [reports, setReports] = useState<ReportSummary[] | null>(null);
   const [metric, setMetric] = useState<TrendMetric>("p95Ms");
   const [split, setSplit] = useState<"overall" | "requests">("overall");
   const [filter, setFilter] = useState("");
+  // Only compare runs against the same system; defaults to the plan's environment.
+  const [envId, setEnvId] = useState<string | null>(null);
   const [open, setOpen] = useState<Report | null>(null);
 
   useEffect(() => {
@@ -599,9 +608,18 @@ function TrendsTab() {
 
   if (open) return <ReportDetail report={open} onBack={() => setOpen(null)} backLabel="Trends" />;
   if (!plan || !reports) return null;
-  const runs = reports
+  const envFilter = envId ?? env?.id ?? "all";
+  const planRuns = reports
     // Reports saved before plan IDs were recorded are matched by plan name.
-    .filter((r) => (r.planId ? r.planId === plan.id : r.name === plan.name))
+    .filter((r) => (r.planId ? r.planId === plan.id : r.name === plan.name));
+  // Environments the plan has run against (reports from before environments have none).
+  const runEnvs = [
+    ...new Map(planRuns.filter((r) => r.environment).map((r) => [r.environment!.id, r.environment!])).values(),
+  ];
+  const envName = (id: string) =>
+    environments.find((e) => e.id === id)?.name || runEnvs.find((e) => e.id === id)?.name || id;
+  const runs = planRuns
+    .filter((r) => envFilter === "all" || !r.environment || r.environment.id === envFilter)
     .filter((r) => `${r.label} ${r.name}`.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const m = trendMetrics.find((t) => t.id === metric)!;
@@ -670,6 +688,19 @@ function TrendsTab() {
             By request
           </button>
         </div>
+        <select
+          className="select trend-env"
+          aria-label="Environment"
+          value={envFilter}
+          onChange={(e) => setEnvId(e.target.value)}
+        >
+          {[...new Set([...(env ? [env.id] : []), ...runEnvs.map((e) => e.id)])].map((id) => (
+            <option key={id} value={id}>
+              {envName(id)}
+            </option>
+          ))}
+          <option value="all">All environments</option>
+        </select>
         <div className="collection-search trend-filter">
           <Search />
           <input
@@ -685,6 +716,7 @@ function TrendsTab() {
         <div className="card">
           <Empty icon={<TrendingUp />} title={runs.length ? "One run so far" : "No runs for this plan yet"}>
             A trend needs at least two saved runs of “{plan.name}”
+            {envFilter !== "all" ? ` in ${envName(envFilter)}` : ""}
             {filter ? ` matching “${filter}”` : ""}. Each finished run adds a point.
           </Empty>
         </div>
@@ -751,6 +783,9 @@ function TrendsTab() {
                       <td>
                         <strong>{r.label || r.name}</strong>
                         {r.stopped ? <span className="badge warning trend-stopped">stopped</span> : null}
+                        {envFilter === "all" && r.environment ? (
+                          <span className="env-tag trend-stopped">{r.environment.name}</span>
+                        ) : null}
                       </td>
                       <td className="muted">{dateTime(r.startedAt)}</td>
                       <td className="r">{r.targetVUs ?? "—"}</td>
@@ -881,6 +916,7 @@ function ReportsTab() {
                 <td>{r.verdict ? <VerdictBadge verdict={r.verdict} /> : <span className="faint">—</span>}</td>
                 <td>
                   <strong>{r.label || r.name}</strong>
+                  {r.environment ? <span className="env-tag report-env">{r.environment.name}</span> : null}
                   {r.label ? <small className="muted block">{r.name}</small> : null}
                 </td>
                 <td className="muted">{dateTime(r.startedAt)}</td>

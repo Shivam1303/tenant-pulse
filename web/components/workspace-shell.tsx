@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -10,6 +10,7 @@ import {
   Copy,
   FilePlus2,
   Gauge,
+  Globe,
   Layers,
   Loader2,
   MoreHorizontal,
@@ -28,6 +29,7 @@ import { duration, ms, num, pct } from "../lib/format";
 const nav = [
   { href: "/workspace/requests", label: "Requests", icon: Layers },
   { href: "/workspace/tenants", label: "Tenants", icon: Users },
+  { href: "/workspace/environments", label: "Environments", icon: Globe },
   { href: "/workspace/run", label: "Run", icon: Gauge },
   { href: "/workspace/results", label: "Results", icon: BarChart3 },
 ];
@@ -52,7 +54,10 @@ function RunBar() {
             ? "Stopping…"
             : "Running"}
       </strong>
-      <span className="run-bar-plan">{live.planName}</span>
+      <span className="run-bar-plan">
+        {live.planName}
+        {live.environment ? <span className="env-tag">{live.environment.name}</span> : null}
+      </span>
       {live.state !== "preflight" ? (
         <div className="run-bar-stats num">
           <span>
@@ -92,8 +97,24 @@ function RunBar() {
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { plans, plan, loading, dirty, saving, notice, setNotice, load, save, createBlank, duplicate, remove } =
-    useWorkspace();
+  const router = useRouter();
+  const {
+    plans,
+    plan,
+    env,
+    environments,
+    selectEnvironment,
+    loading,
+    dirty,
+    saving,
+    notice,
+    setNotice,
+    load,
+    save,
+    createBlank,
+    duplicate,
+    remove,
+  } = useWorkspace();
   const [collapsed, setCollapsed] = useState(false);
   const [saveKey, setSaveKey] = useState("Ctrl S");
   const closeNotice = useCallback(() => setNotice(null), [setNotice]);
@@ -181,6 +202,30 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
                 <option value={plan.id}>{plan.name} (unsaved)</option>
               ) : null}
             </select>
+            <label htmlFor="global-env" className="sr-only">
+              Environment
+            </label>
+            <div className="env-picker" title={env ? `Runs against ${env.baseUrl}` : undefined}>
+              <Globe />
+              <select
+                id="global-env"
+                className="select"
+                value={env?.id || ""}
+                disabled={loading || !env}
+                onChange={(event) =>
+                  event.target.value === "__manage"
+                    ? router.push("/workspace/environments")
+                    : selectEnvironment(event.target.value)
+                }
+              >
+                {environments.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+                <option value="__manage">Manage environments…</option>
+              </select>
+            </div>
             {dirty ? (
               <span className="unsaved" title="Unsaved changes">
                 <span className="dot stopping" /> Unsaved

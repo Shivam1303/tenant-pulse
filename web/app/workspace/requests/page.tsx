@@ -73,7 +73,7 @@ function ResponsePanel({ response, sending }: { response: TryResult | null; send
 }
 
 export default function RequestsPage() {
-  const { plan, updatePlan, setNotice } = useWorkspace();
+  const { plan, env, updatePlan, updateEnv, setNotice } = useWorkspace();
   const confirm = useConfirm();
   const [selected, setSelected] = useState(0);
   const [tab, setTab] = useState<Tab>("params");
@@ -84,14 +84,16 @@ export default function RequestsPage() {
 
   const knownVariables = useMemo(() => {
     const set = new Set(builtins);
-    plan?.tenants.forEach((t) => Object.keys(t.variables || {}).forEach((k) => set.add(k)));
+    Object.keys(env?.variables || {}).forEach((k) => set.add(k));
+    env?.tenants.forEach((t) => Object.keys(t.variables || {}).forEach((k) => set.add(k)));
     return set;
-  }, [plan]);
+  }, [env]);
 
-  if (!plan) return null;
+  if (!plan || !env) return null;
+  const tenants = env.tenants;
   const index = Math.min(selected, plan.requests.length - 1);
   const request = plan.requests[index];
-  const tenant = plan.tenants.find((t) => t.client === tenantId) || plan.tenants[0];
+  const tenant = tenants.find((t) => t.client === tenantId) || tenants[0];
   const used = [...new Set(requestVariables(request))];
   const absolute = ownsUrl(request.path);
   const fromVariable = request.path.startsWith("{{");
@@ -161,14 +163,14 @@ export default function RequestsPage() {
     }
   }
   async function send() {
-    if (!plan) return;
+    if (!plan || !env) return;
     if (!tenant) {
-      setNotice({ type: "error", text: "Add a tenant first. Send uses a tenant’s token and variables." });
+      setNotice({ type: "error", text: `Add a tenant to ${env.name} first. Send uses a tenant’s token and variables.` });
       return;
     }
     if (unsafeMethods.has(request.method)) {
       const ok = await confirm({
-        title: `Send ${request.method} to ${plan.baseUrl}?`,
+        title: `Send ${request.method} to ${env.baseUrl}?`,
         description: "This request can change data on the API.",
         confirmLabel: "Send request",
       });
@@ -181,8 +183,9 @@ export default function RequestsPage() {
       const result = await api<TryResult>("/try", {
         method: "POST",
         body: JSON.stringify({
-          planId: plan.id,
-          baseUrl: plan.baseUrl,
+          environmentId: env.id,
+          baseUrl: env.baseUrl,
+          variables: env.variables,
           settings: plan.settings,
           login: { ...plan.login, headers: strip(plan.login.headers), query: strip(plan.login.query), form: strip(plan.login.form) },
           tenant,
@@ -220,13 +223,16 @@ export default function RequestsPage() {
         <div className="base-url">
           <label htmlFor="base-url-edit" className="label">
             Base URL <span className="faint mono">{"{{baseUrl}}"}</span>
+            <span className="env-tag" title="Set per environment">
+              {env.name}
+            </span>
           </label>
           <input
             id="base-url-edit"
             className="input mono"
-            value={plan.baseUrl}
+            value={env.baseUrl}
             placeholder="http://localhost:8080"
-            onChange={(e) => updatePlan((c) => ({ ...c, baseUrl: e.target.value }))}
+            onChange={(e) => updateEnv((c) => ({ ...c, baseUrl: e.target.value }))}
           />
         </div>
         <div className="collection-search">
@@ -316,9 +322,9 @@ export default function RequestsPage() {
             {absolute ? null : (
               <span
                 className="url-base mono"
-                title={`Base URL ${plan.baseUrl} (set on the Run screen). Type a full http(s):// URL to override it for this request.`}
+                title={`Base URL of ${env.name}: ${env.baseUrl}. Type a full http(s):// URL to override it for this request.`}
               >
-                {plan.baseUrl.replace(/^https?:\/\//, "")}
+                {env.baseUrl.replace(/^https?:\/\//, "")}
               </span>
             )}
             <input
@@ -335,12 +341,12 @@ export default function RequestsPage() {
         </div>
         {fromVariable ? (
           <p className="url-note">
-            URL from a variable. <code>{"{{baseUrl}}"}</code> is <code>{plan.baseUrl}</code>; any other variable must hold
+            URL from a variable. <code>{"{{baseUrl}}"}</code> is <code>{env.baseUrl}</code> in {env.name}; any other variable must hold
             a full URL or host for each tenant.
           </p>
         ) : absolute ? (
           <p className="url-note">
-            Full URL: this request ignores the base URL <code>{plan.baseUrl}</code>. Start with <code>/</code> to use it
+            Full URL: this request ignores the base URL <code>{env.baseUrl}</code>. Start with <code>/</code> to use it
             again.
           </p>
         ) : null}
@@ -470,16 +476,16 @@ export default function RequestsPage() {
             aria-label="Tenant for Send"
             value={tenant?.client || ""}
             onChange={(e) => setTenantId(e.target.value)}
-            disabled={!plan.tenants.length}
+            disabled={!tenants.length}
           >
-            {plan.tenants.length ? (
-              plan.tenants.map((t, i) => (
+            {tenants.length ? (
+              tenants.map((t, i) => (
                 <option key={i} value={t.client}>
                   {t.client || "Unnamed tenant"}
                 </option>
               ))
             ) : (
-              <option value="">No tenants yet</option>
+              <option value="">No tenants in {env.name}</option>
             )}
           </select>
         </div>

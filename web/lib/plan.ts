@@ -1,10 +1,10 @@
-import type { LoginSpec, Method, Plan, RequestSpec, Tenant } from "./types";
+import type { Environment, LoginSpec, Method, Plan, RequestSpec, Tenant } from "./types";
 
 // Mirrors MAX_VUS in service/schema.js.
 export const MAX_VUS = 1000;
 // Mirrors MAX_RUN_SECONDS: longest run, ramp-up included.
 export const MAX_RUN_SECONDS = 600;
-export const inRun = (plan: Plan) => plan.tenants.filter((t) => t.enabled !== false);
+export const inRun = (env: Environment) => env.tenants.filter((t) => t.enabled !== false);
 export const unsafeMethods = new Set<Method>(["POST", "PUT", "PATCH", "DELETE"]);
 export const builtins = new Set(["token", "client", "username", "baseUrl"]);
 const pattern = /\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g;
@@ -38,10 +38,12 @@ export function requiredVariables(plan: Plan) {
   return { requests: [...forRequests], login: [...forLogin] };
 }
 
-export function tenantProblems(plan: Plan, tenant: Tenant) {
+// What a tenant still needs before a run. A variable the environment shares
+// counts as filled in.
+export function tenantProblems(plan: Plan, env: Environment, tenant: Tenant) {
   const need = requiredVariables(plan);
   const keys = [...need.requests, ...(tenant.authMode !== "token" ? need.login : [])];
-  const missing = [...new Set(keys)].filter((k) => !tenant.variables?.[k]);
+  const missing = [...new Set(keys)].filter((k) => !tenant.variables?.[k] && !env.variables?.[k]);
   const auth =
     tenant.authMode === "token"
       ? !(tenant.token || tenant.hasToken)

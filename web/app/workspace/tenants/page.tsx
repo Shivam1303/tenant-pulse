@@ -22,12 +22,12 @@ import { tenantsFromCsv } from "../../../lib/csv";
 import type { ImportRow } from "../../../lib/csv";
 import { blankTenant, builtins, inRun, requiredVariables, tenantProblems } from "../../../lib/plan";
 import { ms } from "../../../lib/format";
-import type { BodyType, LoginSpec, LoginTest, Method, Plan, Tenant } from "../../../lib/types";
+import type { BodyType, Environment, LoginSpec, LoginTest, Method, Plan, Tenant } from "../../../lib/types";
 
 type View = "tenants" | "login";
 
-function StatusBadge({ plan, tenant }: { plan: Plan; tenant: Tenant }) {
-  const { missing, auth } = tenantProblems(plan, tenant);
+function StatusBadge({ plan, env, tenant }: { plan: Plan; env: Environment; tenant: Tenant }) {
+  const { missing, auth } = tenantProblems(plan, env, tenant);
   if (!tenant.client) return <span className="badge warning">No client</span>;
   if (tenant.enabled === false) return <span className="badge">Skipped</span>;
   if (auth) return <span className="badge warning">{tenant.authMode === "token" ? "No token" : "No password"}</span>;
@@ -48,6 +48,7 @@ function VariableRow({
   name,
   value,
   required,
+  shared,
   onRename,
   onChange,
   onRemove,
@@ -55,6 +56,8 @@ function VariableRow({
   name: string;
   value: string;
   required?: boolean;
+  // The environment's shared value, used when this tenant leaves it empty.
+  shared?: string;
   onRename?: (name: string) => void;
   onChange: (value: string) => void;
   onRemove?: () => void;
@@ -73,10 +76,11 @@ function VariableRow({
         />
       )}
       <input
-        className={`input mono ${required && !value ? "invalid" : ""}`}
+        className={`input mono ${required && !value && !shared ? "invalid" : ""}`}
         aria-label={`${name} value`}
         value={value}
-        placeholder={required ? "Required by a request" : "Value"}
+        placeholder={shared ? `${shared}  (shared)` : required ? "Required by a request" : "Value"}
+        title={shared && !value ? "Empty uses the environment’s shared value" : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
       {onRemove ? (
@@ -90,18 +94,28 @@ function VariableRow({
   );
 }
 
-function TenantEditor({ plan, index, onRemove }: { plan: Plan; index: number; onRemove: () => void }) {
-  const { updatePlan, setNotice } = useWorkspace();
+function TenantEditor({
+  plan,
+  env,
+  index,
+  onRemove,
+}: {
+  plan: Plan;
+  env: Environment;
+  index: number;
+  onRemove: () => void;
+}) {
+  const { updateEnv, setNotice } = useWorkspace();
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<LoginTest | null>(null);
-  const tenant = plan.tenants[index];
+  const tenant = env.tenants[index];
   const need = requiredVariables(plan);
   const required = [...new Set([...need.requests, ...(tenant.authMode !== "token" ? need.login : [])])];
   const extra = Object.keys(tenant.variables || {}).filter((k) => !required.includes(k));
 
   function update(patch: Partial<Tenant>) {
     setResult(null);
-    updatePlan((current) => ({
+    updateEnv((current) => ({
       ...current,
       tenants: current.tenants.map((t, i) => (i === index ? { ...t, ...patch } : t)),
     }));
@@ -136,8 +150,9 @@ function TenantEditor({ plan, index, onRemove }: { plan: Plan; index: number; on
         await api<LoginTest>("/auth/test", {
           method: "POST",
           body: JSON.stringify({
-            planId: plan.id,
-            baseUrl: plan.baseUrl,
+            environmentId: env.id,
+            baseUrl: env.baseUrl,
+            variables: env.variables,
             settings: plan.settings,
             login: plan.login,
             tenant,
@@ -156,7 +171,7 @@ function TenantEditor({ plan, index, onRemove }: { plan: Plan; index: number; on
       <div className="card-head">
         <div>
           <h2>{tenant.client || "New tenant"}</h2>
-          <p>Credentials and values used for this tenant’s requests.</p>
+          <p>Credentials and values for this tenant in {env.name}.</p>
         </div>
         <button className="btn ghost icon sm" onClick={onRemove} aria-label="Remove tenant" title="Remove tenant">
           <Trash2 />
@@ -256,13 +271,21 @@ function TenantEditor({ plan, index, onRemove }: { plan: Plan; index: number; on
         </div>
         <div className="var-list">
           {required.map((k) => (
-            <VariableRow key={k} name={k} value={tenant.variables?.[k] || ""} required onChange={(v) => setVar(k, v)} />
+            <VariableRow
+              key={k}
+              name={k}
+              value={tenant.variables?.[k] || ""}
+              shared={env.variables?.[k]}
+              required
+              onChange={(v) => setVar(k, v)}
+            />
           ))}
           {extra.map((k) => (
             <VariableRow
               key={k}
               name={k}
               value={tenant.variables[k]}
+              shared={env.variables?.[k]}
               onRename={(to) => renameVar(k, to)}
               onChange={(v) => setVar(k, v)}
               onRemove={() => removeVar(k)}
@@ -277,7 +300,7 @@ function TenantEditor({ plan, index, onRemove }: { plan: Plan; index: number; on
   );
 }
 
-function LoginSetup({ plan }: { plan: Plan }) {
+function LoginSetup({ plan, env }: { plan: Plan; env: Environment }) {
   const { updatePlan } = useWorkspace();
   const login = plan.login;
   const update = (patch: Partial<LoginSpec>) =>
@@ -303,7 +326,9 @@ function LoginSetup({ plan }: { plan: Plan }) {
             ))}
           </select>
           <div className="url-input">
-            <span className="url-base mono">{plan.baseUrl.replace(/^https?:\/\//, "")}</span>
+            <span className="url-base mono" title={`Base URL of ${env.name}`}>
+              {env.baseUrl.replace(/^https?:\/\//, "")}
+            </span>
             <input
               className="input mono"
               aria-label="Login path"
@@ -364,19 +389,19 @@ function LoginSetup({ plan }: { plan: Plan }) {
 }
 
 function ImportDialog({ onClose }: { onClose: () => void }) {
-  const { plan, updatePlan, setNotice } = useWorkspace();
+  const { env, updateEnv, setNotice } = useWorkspace();
   const [text, setText] = useState("");
   const parsed = useMemo(() => (text.trim() ? tenantsFromCsv(text) : null), [text]);
   const rows: ImportRow[] = parsed?.rows || [];
   const valid = rows.filter((r) => !r.problems.length);
-  const existing = new Set(plan?.tenants.map((t) => t.client));
+  const existing = new Set(env?.tenants.map((t) => t.client));
   const replaced = valid.filter((r) => existing.has(r.tenant.client)).length;
 
   async function readFile(file: File) {
     setText(await file.text());
   }
   function apply() {
-    updatePlan((current) => {
+    updateEnv((current) => {
       const byClient = new Map(current.tenants.map((t) => [t.client, t]));
       for (const { tenant } of valid) {
         const prior = byClient.get(tenant.client);
@@ -391,7 +416,7 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
       }
       return { ...current, tenants: [...byClient.values()] };
     });
-    setNotice({ type: "success", text: `Imported ${valid.length} tenants. Save the plan to keep them.` });
+    setNotice({ type: "success", text: `Imported ${valid.length} tenants into ${env?.name}. Save to keep them.` });
     onClose();
   }
   const columns = rows.length ? Object.keys(rows[0].tenant.variables) : [];
@@ -399,7 +424,7 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog
       wide
-      title="Import tenants from CSV"
+      title={`Import tenants into ${env?.name || "the environment"}`}
       description={
         <>
           Columns <code>client</code>, <code>username</code>, <code>password</code>, <code>token</code>. Every other
@@ -490,40 +515,39 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
 }
 
 export default function TenantsPage() {
-  const { plan, updatePlan } = useWorkspace();
+  const { plan, env, updateEnv } = useWorkspace();
   const confirm = useConfirm();
   const [view, setView] = useState<View>("tenants");
   const [selected, setSelected] = useState(0);
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
-  if (!plan) return null;
-  const index = Math.min(selected, Math.max(0, plan.tenants.length - 1));
-  const loginTenants = plan.tenants.filter((t) => t.authMode !== "token").length;
-  const running = inRun(plan);
+  if (!plan || !env) return null;
+  const tenants = env.tenants;
+  const index = Math.min(selected, Math.max(0, tenants.length - 1));
+  const loginTenants = tenants.filter((t) => t.authMode !== "token").length;
+  const running = inRun(env);
   const ready = running.filter((t) => {
-    const p = tenantProblems(plan, t);
+    const p = tenantProblems(plan, env, t);
     return t.client && !p.auth && !p.missing.length;
   }).length;
-  const rows = plan.tenants
+  const rows = tenants
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => `${t.client} ${t.username}`.toLowerCase().includes(query.toLowerCase()));
 
   function add() {
-    if (!plan) return;
-    updatePlan((current) => ({ ...current, tenants: [...current.tenants, blankTenant()] }));
-    setSelected(plan.tenants.length);
+    updateEnv((current) => ({ ...current, tenants: [...current.tenants, blankTenant()] }));
+    setSelected(tenants.length);
   }
   async function remove() {
-    if (!plan) return;
-    const t = plan.tenants[index];
+    const t = tenants[index];
     const ok = await confirm({
       title: `Remove ${t.client || "this tenant"}?`,
-      description: "Its saved password or token is deleted when you save the plan.",
+      description: `It is removed from ${env?.name} for every plan, with its saved password or token, when you save.`,
       confirmLabel: "Remove tenant",
       danger: true,
     });
     if (!ok) return;
-    updatePlan((current) => ({ ...current, tenants: current.tenants.filter((_, i) => i !== index) }));
+    updateEnv((current) => ({ ...current, tenants: current.tenants.filter((_, i) => i !== index) }));
     setSelected(Math.max(0, index - 1));
   }
 
@@ -532,7 +556,7 @@ export default function TenantsPage() {
       <div className="page-head">
         <div className="segmented" role="tablist">
           <button role="tab" aria-selected={view === "tenants"} onClick={() => setView("tenants")}>
-            <Users size={14} /> Tenants <span className="faint num">{plan.tenants.length}</span>
+            <Users size={14} /> Tenants <span className="faint num">{tenants.length}</span>
           </button>
           <button role="tab" aria-selected={view === "login"} onClick={() => setView("login")}>
             <LogIn size={14} /> Login request
@@ -541,7 +565,7 @@ export default function TenantsPage() {
         {view === "tenants" ? (
           <div className="page-actions">
             <span className="muted small num">
-              {running.length} of {plan.tenants.length} in the run · {ready} ready
+              <span className="env-tag">{env.name}</span> {running.length} of {tenants.length} in the run · {ready} ready
             </span>
             <button className="btn" onClick={() => setImporting(true)}>
               <FileUp /> Import CSV
@@ -558,12 +582,12 @@ export default function TenantsPage() {
       </div>
 
       {view === "login" ? (
-        <LoginSetup plan={plan} />
-      ) : !plan.tenants.length ? (
+        <LoginSetup plan={plan} env={env} />
+      ) : !tenants.length ? (
         <div className="card">
           <Empty
             icon={<Users />}
-            title="No tenants yet"
+            title={`No tenants in ${env.name} yet`}
             action={
               <div className="page-actions">
                 <button className="btn" onClick={() => setImporting(true)}>
@@ -575,7 +599,8 @@ export default function TenantsPage() {
               </div>
             }
           >
-            Each tenant runs the same requests with its own token and IDs. Add them one by one or import a CSV.
+            Each tenant runs the same requests with its own token and IDs. Tenants belong to the environment, so every
+            plan that runs against {env.name} uses them. Add them one by one or import a CSV.
           </Empty>
         </div>
       ) : (
@@ -616,7 +641,7 @@ export default function TenantsPage() {
                           checked={t.enabled !== false}
                           label={`Include ${t.client || "tenant"} in runs`}
                           onChange={(enabled) =>
-                            updatePlan((c) => ({
+                            updateEnv((c) => ({
                               ...c,
                               tenants: c.tenants.map((x, n) => (n === i ? { ...x, enabled } : x)),
                             }))
@@ -629,7 +654,7 @@ export default function TenantsPage() {
                       </td>
                       <td className="muted">{t.authMode === "token" ? "—" : t.username || "—"}</td>
                       <td>
-                        <StatusBadge plan={plan} tenant={t} />
+                        <StatusBadge plan={plan} env={env} tenant={t} />
                       </td>
                     </tr>
                   ))}
@@ -644,7 +669,13 @@ export default function TenantsPage() {
               </table>
             </div>
           </section>
-          <TenantEditor key={index} plan={plan} index={index} onRemove={() => void remove()} />
+          <TenantEditor
+            key={`${env.id}-${index}`}
+            plan={plan}
+            env={env}
+            index={index}
+            onRemove={() => void remove()}
+          />
         </div>
       )}
       {importing ? <ImportDialog onClose={() => setImporting(false)} /> : null}
