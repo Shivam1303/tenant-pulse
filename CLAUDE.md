@@ -14,6 +14,7 @@ Node 24 through nvm (`.nvmrc`). In non-interactive shells nvm is not loaded; cal
 npm run dev           # same as ./run.sh without nvm (node start.js dev)
 npm test              # the only test suite: node service/test/mock.test.js
 npm run build         # next build for web/
+npm run package       # single-file executables in dist/ (Linux x64, Windows x64); see README
 cd web && npx tsc --noEmit -p .   # type-check the web app (no linter is configured)
 node service/cli.js --plan default [--preflight-only] [--allow-writes]
 ```
@@ -35,6 +36,7 @@ Two processes, started together by `start.js`:
 - `engine.js`: `makeRequest` (template → URL/headers/body), `send`, `login`, `preflight` (8 tenants in parallel), `tryRequest` / `testLogin` (single draft calls), and the `Run` class. A run is closed-loop: each VU loops over enabled requests with think time (`pacingMs` × random 0.5–1.5). `Run.tick()` runs every second. It pushes a series point (per-second p50/p95/p99 from a window histogram, rate, error rate, VUs, event-loop `lagMs`) and caches summaries, so `snapshot(since)` stays cheap.
 - `stats.js`: fixed-size log-scale histogram (~2% buckets, `Uint32Array`, no sorting), `summary`, `verdict` (thresholds → PASS/FAIL), `isSuccess` (2xx and, when `settings.checkSuccessField`, not `"success": false`).
 - `store.js`: JSON files in `TENANT_PULSE_DATA` (default `service/data/`, git-ignored). `plans.json`, `secrets.json` (0600), `report-<id>.json` per run, and `reports-index.json` (summaries including per-request p50/p95/p99 for trends; rebuilt automatically when missing or outdated). `plans()` runs `defaults.migratePlan` on every read: **add a migration there when changing the plan shape**, never in schema.
+- `app.js`: entry point of the packaged app. One process serves the static web export (`web/out`, or SEA assets inside the executable) and `/api` on `API_PORT`; data goes to `tenant-pulse-data/` next to the executable. `scripts/package.js` bundles it and every `./module` it requires into one script, so **service modules must only `require` built-ins or `"./name"`**.
 - `defaults.js`: `newPlan`, `defaultLogin` (reproduces the original `POST /pos-login` → `token`), `migratePlan`.
 
 ### Cross-cutting rules

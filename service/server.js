@@ -1,6 +1,8 @@
 "use strict";
 
+const fs = require("fs");
 const http = require("http");
+const path = require("path");
 const store = require("./store");
 const { Run, preflight, tryRequest, testLogin } = require("./engine");
 const schema = require("./schema");
@@ -282,10 +284,52 @@ async function api(req, res, url) {
   respond(res, 200, result);
 }
 
+// The packaged app (scripts/package.js) serves the exported web app from this process.
+// staticFile(pathname) returns a Buffer or null; it is set by the entry point, or from TENANT_PULSE_WEB.
+const types = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+};
+function webFile(req, res, url) {
+  let name = url.pathname;
+  if (name === "/" || name === "/workspace" || name === "/workspace/") {
+    res.writeHead(302, { location: "/workspace/requests" });
+    return res.end();
+  }
+  if (name.endsWith("/")) name = name.slice(0, -1);
+  if (name.split("/").includes("..")) throw httpError(404, "Not found.");
+  const candidates = /\.[a-z0-9]+$/i.test(name) ? [name] : [`${name}.html`, `${name}/index.html`];
+  for (const candidate of candidates) {
+    const body = server.staticFile(candidate);
+    if (!body) continue;
+    const type = types[path.extname(candidate)] || "application/octet-stream";
+    res.writeHead(200, {
+      "content-type": type,
+      "cache-control": candidate.startsWith("/_next/static/") ? "public, max-age=31536000, immutable" : "no-cache",
+      "x-content-type-options": "nosniff",
+      "content-security-policy":
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    });
+    return res.end(req.method === "HEAD" ? undefined : body);
+  }
+  const missing = server.staticFile("/404.html");
+  res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+  res.end(missing || "Not found.");
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     if (!checkLocal(req)) return respond(res, 403, { error: "Local access only." });
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
+    if (server.staticFile && !url.pathname.startsWith("/api/") && ["GET", "HEAD"].includes(req.method))
+      return webFile(req, res, url);
     await api(req, res, url);
   } catch (error) {
     // Validation errors carry a field; known errors carry a status.
@@ -295,6 +339,16 @@ const server = http.createServer(async (req, res) => {
     respond(res, 500, { error: "Something went wrong in the service. See its log." });
   }
 });
+if (process.env.TENANT_PULSE_WEB) {
+  const root = path.resolve(process.env.TENANT_PULSE_WEB);
+  server.staticFile = (name) => {
+    try {
+      return fs.readFileSync(path.join(root, name));
+    } catch (_) {
+      return null;
+    }
+  };
+}
 if (require.main === module)
   server.listen(port, "127.0.0.1", () => console.log(`Tenant Pulse API: http://127.0.0.1:${port}`));
 module.exports = server;

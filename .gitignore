@@ -8,3 +8,7 @@ web/.next/
 *.tsbuildinfo
 .env
 .env.*
+
+# Packaged app (npm run package)
+dist/
+web/out/

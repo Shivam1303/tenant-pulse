@@ -7,7 +7,8 @@
     "dev": "node start.js dev",
     "start": "node start.js start",
     "test": "node service/test/mock.test.js",
-    "build": "npm --prefix web run build"
+    "build": "npm --prefix web run build",
+    "package": "node scripts/package.js"
   },
   "engines": {
     "node": ">=20.9"

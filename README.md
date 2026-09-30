@@ -25,6 +25,17 @@ npm start
 
 Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Set `WEB_PORT` and `API_PORT` to use other ports (defaults 3000 and 4174); `API_PORT` must also be set for `npm run build`, because Next.js reads the proxy target at build time. The Next.js app and Node service bind only to `127.0.0.1`. For development, use `npm run dev` instead of building and starting.
 
+## Share it as a single executable
+
+`npm run package` (Node 24, web dependencies installed) builds apps that need nothing installed:
+
+- `dist/tenant-pulse-win-x64.exe` (Windows x64)
+- `dist/tenant-pulse-linux-x64` (Linux x64)
+
+Send one file. The recipient runs it (double-click on Windows; `chmod +x` then `./tenant-pulse-linux-x64` on Linux). It serves the app and the API on [http://127.0.0.1:4174](http://127.0.0.1:4174), opens the browser, and keeps plans, secrets and reports in a `tenant-pulse-data` folder next to the executable. Closing the window stops it. Set `API_PORT` to use another port, or `TENANT_PULSE_NO_OPEN=1` to skip opening the browser.
+
+The script exports the web app as static files (`web/out`), bundles `service/app.js` and the service modules into one script, and embeds both into the Node binary as a [single executable application](https://nodejs.org/api/single-executable-applications.html). It downloads the matching Node build for the other platform from nodejs.org (checksum-verified, cached in `dist/.cache`) and uses `npx postject`. Pass targets to build only some: `node scripts/package.js win-x64`. The Windows executable is unsigned, so SmartScreen may ask the recipient to confirm ("More info" → "Run anyway"). MySQL observation still needs the `mysql` client on the recipient's PATH.
+
 ## Workflow
 
 1. **Requests:** Build the collection in a three-pane editor: method, path, query params, headers, body (JSON, text or form) and authorization. Switch requests in or out of the run. Use `{{name}}` for tenant variables. The base URL is editable at the top of the collection. A request's URL can be a path on it (`/orders`), a full URL that overrides it (`https://other-host/orders`), or start with a variable: `{{baseUrl}}/orders`, or a tenant variable such as `{{apiHost}}/orders` so each tenant can point at its own server. Pick a tenant and click **Send** to call the unsaved request once and inspect the response.
