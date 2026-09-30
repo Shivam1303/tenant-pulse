@@ -53,7 +53,7 @@ function newPlan() {
     id: "default",
     name: "Duell API baseline",
     label: "",
-    baseUrl: "http://localhost:8080",
+    environmentId: "local",
     settings: {
       vusPerTenant: 2,
       rampUpSeconds: 30,
@@ -65,13 +65,18 @@ function newPlan() {
     },
     thresholds: { p95Ms: null, errorRatePct: null },
     login: defaultLogin(),
-    tenants: [],
     requests: requests.map((r) => ({ ...requestDefaults(), ...structuredClone(r) })),
     mysql: [],
   };
 }
 
-// Bring plans saved by older versions up to the current shape.
+// The environment new installs start with.
+function newEnvironment() {
+  return { id: "local", name: "Local", baseUrl: "http://localhost:8080", variables: {}, tenants: [] };
+}
+
+// Bring plans saved by older versions up to the current shape. Tenants and
+// the base URL moved to environments; store.js moves those between files.
 function migratePlan(plan) {
   const settings = { ...plan.settings };
   if (settings.vusPerTenant == null) settings.vusPerTenant = settings.workersPerTenant;
@@ -86,9 +91,16 @@ function migratePlan(plan) {
     thresholds: plan.thresholds || { p95Ms: null, errorRatePct: null },
     login: plan.login || defaultLogin(),
     requests: plan.requests.map((r) => ({ ...requestDefaults(), ...r })),
-    tenants: plan.tenants.map((t) => ({ variables: {}, enabled: true, ...t })),
     mysql: plan.mysql || [],
   };
 }
 
-module.exports = { newPlan, migratePlan, defaultLogin };
+function migrateEnvironment(env) {
+  return {
+    variables: {},
+    ...env,
+    tenants: (env.tenants || []).map((t) => ({ variables: {}, enabled: true, authMode: "login", ...t })),
+  };
+}
+
+module.exports = { newPlan, newEnvironment, migratePlan, migrateEnvironment, defaultLogin };

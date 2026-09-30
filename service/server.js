@@ -105,17 +105,18 @@ function assertWritesAllowed(requests, body) {
     throw httpError(400, "Confirm that write requests may change data.", { field: "allowWrites" });
 }
 function loadPlan(id) {
-  const data = store.getPlan(id, true);
+  const data = store.runPlan(id);
   if (!data) throw httpError(404, "Plan not found.");
   return data;
 }
 
-// Draft context for Send / Test login: the unsaved request, tenant and login
-// from the browser, with secrets falling back to the saved ones.
+// Draft context for Send / Test login: the unsaved request, tenant, login and
+// environment from the browser, with secrets falling back to the ones saved
+// for that tenant in that environment.
 function draftContext(body) {
   const tenant = schema.validateTenant(body.tenant, "tenant");
-  const stored = store.getPlan(body.planId, false);
-  const saved = (stored && stored.secrets[body.tenant.savedClient || tenant.client]) || {};
+  const variables = schema.variableMap(body.variables, "variables");
+  const saved = store.environmentSecrets(body.environmentId)[body.tenant.savedClient || tenant.client] || {};
   const secret = {
     token: body.tenant.token ? String(body.tenant.token) : saved.token,
     password: body.tenant.password ? String(body.tenant.password) : saved.password,
@@ -130,7 +131,8 @@ function draftContext(body) {
         checkSuccessField: settings.checkSuccessField !== false,
       },
     },
-    tenant,
+    // The environment's shared variables, under the tenant's own.
+    tenant: { ...tenant, variables: { ...variables, ...tenant.variables } },
     secret,
   };
 }
@@ -163,6 +165,29 @@ const routes = [
     ({ id }) => {
       const copy = store.duplicatePlan(id);
       if (!copy) throw httpError(404, "Plan not found.");
+      return copy;
+    },
+  ],
+  [
+    "GET",
+    "/api/environments",
+    () => Object.values(store.environments()).map((e) => store.publicEnvironment(e)),
+  ],
+  [
+    "PUT",
+    "/api/environments/:id",
+    ({ id }, body) => {
+      if (body.id !== id) throw httpError(400, "Environment ID does not match.");
+      return store.saveEnvironment(body);
+    },
+  ],
+  ["DELETE", "/api/environments/:id", ({ id }) => ({ removed: store.removeEnvironment(id) })],
+  [
+    "POST",
+    "/api/environments/:id/duplicate",
+    ({ id }) => {
+      const copy = store.duplicateEnvironment(id);
+      if (!copy) throw httpError(404, "Environment not found.");
       return copy;
     },
   ],

@@ -407,6 +407,7 @@ class Run {
       id: this.id,
       planId: this.plan.id,
       planName: this.plan.name,
+      environment: this.plan.environment || null,
       state: this.state,
       error: this.error,
       activeVUs: this.activeVUs,

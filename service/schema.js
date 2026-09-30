@@ -199,20 +199,15 @@ function validateSettings(s = {}) {
   return settings;
 }
 
-function validateTenant(t, field) {
-  if (!t || typeof t !== "object") fail(field, "Invalid tenant.");
-  const client = text(t.client, `${field}.client`, 120, true);
-  const username = text(t.username || "", `${field}.username`, 200, false);
-  const authMode = t.authMode || "login";
-  if (!["login", "token"].includes(authMode))
-    fail(`${field}.authMode`, "Choose login or bearer token.");
-  const variables = t.variables || {};
+// Name → value maps: tenant variables and an environment's shared variables.
+function variableMap(variables = {}, field) {
   if (
+    !variables ||
     typeof variables !== "object" ||
     Array.isArray(variables) ||
     Object.keys(variables).length > 100
   )
-    fail(`${field}.variables`, "Enter variable names and values.");
+    fail(field, "Enter variable names and values.");
   const cleaned = {};
   for (const [key, value] of Object.entries(variables)) {
     if (
@@ -222,13 +217,24 @@ function validateTenant(t, field) {
       String(value).length > 4096
     )
       fail(
-        `${field}.variables`,
+        field,
         builtins.has(key)
           ? `{{${key}}} is provided automatically; remove it from variables.`
           : "Variables need simple names and text or numeric values.",
       );
     cleaned[key] = String(value);
   }
+  return cleaned;
+}
+
+function validateTenant(t, field) {
+  if (!t || typeof t !== "object") fail(field, "Invalid tenant.");
+  const client = text(t.client, `${field}.client`, 120, true);
+  const username = text(t.username || "", `${field}.username`, 200, false);
+  const authMode = t.authMode || "login";
+  if (!["login", "token"].includes(authMode))
+    fail(`${field}.authMode`, "Choose login or bearer token.");
+  const cleaned = variableMap(t.variables, `${field}.variables`);
   return { client, username, authMode, variables: cleaned, enabled: t.enabled !== false };
 }
 
@@ -247,19 +253,26 @@ function requiredVariables(requests, login) {
   return { requests: [...needed], login: [...forLogin] };
 }
 
-function validatePlan(input, secrets, requireTenants) {
+function id(value, field, label) {
+  const v = text(value, field, 80, true);
+  if (!/^[a-zA-Z0-9_-]+$/.test(v))
+    fail(field, `${label} ID may contain letters, numbers, underscores, and dashes.`);
+  return v;
+}
+
+// A plan is what to call and how hard: requests, login, load and criteria.
+// Where to call it (base URL, tenants) comes from its environment.
+function validatePlan(input) {
   if (
     !input ||
     typeof input !== "object" ||
     JSON.stringify(input).length > 1000000
   )
     fail("plan", "Plan is too large.");
-  const id = text(input.id, "id", 80, true);
-  if (!/^[a-zA-Z0-9_-]+$/.test(id))
-    fail("id", "Plan ID may contain letters, numbers, underscores, and dashes.");
+  const planId = id(input.id, "id", "Plan");
   const name = text(input.name, "name", 120, true);
   const label = text(input.label || "", "label", 120, false);
-  const baseUrl = origin(input.baseUrl);
+  const environmentId = id(input.environmentId, "environmentId", "Environment");
   const settings = validateSettings(input.settings);
   const t = input.thresholds || {};
   const thresholds = {
@@ -283,44 +296,6 @@ function validatePlan(input, secrets, requireTenants) {
   });
   if (!requests.some((r) => r.enabled))
     fail("requests", "Enable at least one request.");
-  if (
-    !Array.isArray(input.tenants) ||
-    input.tenants.length > 100 ||
-    (requireTenants && !input.tenants.length)
-  )
-    fail("tenants", "Add 1 to 100 tenants.");
-  const required = requiredVariables(requests, login);
-  const tenantIds = new Set();
-  const tenants = input.tenants.map((raw, i) => {
-    const field = `tenants.${i}`;
-    const tenant = validateTenant(raw, field);
-    if (tenantIds.has(tenant.client))
-      fail(`${field}.client`, "Client numbers must be unique.");
-    tenantIds.add(tenant.client);
-    if (requireTenants && tenant.enabled) {
-      const secret = secrets[tenant.client] || {};
-      if (tenant.authMode === "token" ? !secret.token : !secret.password)
-        fail(
-          `${field}.auth`,
-          tenant.authMode === "token"
-            ? `Enter a bearer token for ${tenant.client}.`
-            : `Enter a password for ${tenant.client}.`,
-        );
-      const keys = [
-        ...required.requests,
-        ...(tenant.authMode === "login" ? required.login : []),
-      ];
-      for (const key of keys)
-        if (!tenant.variables[key])
-          fail(`${field}.variables.${key}`, `Enter ${key} for ${tenant.client}.`);
-    }
-    return tenant;
-  });
-  // Only tenants switched on take part in a run.
-  const inRun = tenants.filter((t) => t.enabled);
-  if (requireTenants && !inRun.length) fail("tenants", "Switch on at least one tenant for the run.");
-  if (inRun.length * settings.vusPerTenant > MAX_VUS)
-    fail("settings.vusPerTenant", `The plan exceeds the ${MAX_VUS} VU safety limit.`);
   const mysql = (input.mysql || []).map((m, i) => {
     if (!m || typeof m !== "object") fail(`mysql.${i}`, "Invalid MySQL host.");
     const host = text(m.host, `mysql.${i}.host`, 255, true);
@@ -336,22 +311,82 @@ function validatePlan(input, secrets, requireTenants) {
   if (mysql.length > 10 || new Set(mysql.map((m) => m.id)).size !== mysql.length)
     fail("mysql", "Use at most 10 MySQL hosts with unique IDs.");
   return {
-    id,
+    id: planId,
     name,
     label,
-    baseUrl,
+    environmentId,
     settings,
     thresholds,
     login,
     requests,
-    // A plan validated for a run holds only the tenants in the run.
-    tenants: requireTenants ? inRun : tenants,
     mysql,
+  };
+}
+
+// An environment is a target system: its base URL, variables shared by its
+// tenants, and the tenants (accounts) that exist there.
+function validateEnvironment(input) {
+  if (!input || typeof input !== "object" || JSON.stringify(input).length > 1000000)
+    fail("environment", "Environment is too large.");
+  const envId = id(input.id, "id", "Environment");
+  const name = text(input.name, "name", 80, true);
+  const baseUrl = origin(input.baseUrl);
+  const variables = variableMap(input.variables, "variables");
+  if (!Array.isArray(input.tenants || []) || (input.tenants || []).length > 100)
+    fail("tenants", "Use at most 100 tenants.");
+  const clients = new Set();
+  const tenants = (input.tenants || []).map((raw, i) => {
+    const tenant = validateTenant(raw, `tenants.${i}`);
+    if (clients.has(tenant.client))
+      fail(`tenants.${i}.client`, "Client numbers must be unique.");
+    clients.add(tenant.client);
+    return tenant;
+  });
+  return { id: envId, name, baseUrl, variables, tenants };
+}
+
+// Joins a validated plan with its environment into what the engine runs:
+// the environment's base URL and only the tenants switched on, each with the
+// environment's shared variables under its own. Checks that every tenant in
+// the run has credentials and the variables the requests need.
+function resolveRun(plan, env, secrets) {
+  const required = requiredVariables(plan.requests, plan.login);
+  const tenants = [];
+  env.tenants.forEach((tenant, i) => {
+    if (!tenant.enabled) return;
+    const field = `tenants.${i}`;
+    const secret = secrets[tenant.client] || {};
+    if (tenant.authMode === "token" ? !secret.token : !secret.password)
+      fail(
+        `${field}.auth`,
+        tenant.authMode === "token"
+          ? `Enter a bearer token for ${tenant.client} in ${env.name}.`
+          : `Enter a password for ${tenant.client} in ${env.name}.`,
+      );
+    const variables = { ...env.variables, ...tenant.variables };
+    const keys = [...required.requests, ...(tenant.authMode === "login" ? required.login : [])];
+    for (const key of keys)
+      if (!variables[key])
+        fail(`${field}.variables.${key}`, `Enter ${key} for ${tenant.client} in ${env.name}, or as a shared variable.`);
+    tenants.push({ ...tenant, variables });
+  });
+  if (!env.tenants.length) fail("tenants", `Add at least one tenant to ${env.name}.`);
+  if (!tenants.length) fail("tenants", "Switch on at least one tenant for the run.");
+  if (tenants.length * plan.settings.vusPerTenant > MAX_VUS)
+    fail("settings.vusPerTenant", `The plan exceeds the ${MAX_VUS} VU safety limit.`);
+  return {
+    ...plan,
+    baseUrl: env.baseUrl,
+    environment: { id: env.id, name: env.name },
+    tenants,
   };
 }
 
 module.exports = {
   validatePlan,
+  validateEnvironment,
+  resolveRun,
+  variableMap,
   validateRequest,
   validateTenant,
   validateLogin,

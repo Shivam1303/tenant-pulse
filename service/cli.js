@@ -13,11 +13,12 @@ function printRows(rows) {
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help") || !args.includes("--plan")) {
-    console.log("Usage: node cli.js --plan PLAN_ID [--preflight-only] [--allow-writes]");
+    console.log("Usage: node cli.js --plan PLAN_ID [--env ENVIRONMENT_ID] [--preflight-only] [--allow-writes]");
     return;
   }
   const id = args[args.indexOf("--plan") + 1];
-  const data = store.getPlan(id, true);
+  const env = args.includes("--env") ? args[args.indexOf("--env") + 1] : undefined;
+  const data = store.runPlan(id, env);
   if (!data) throw new Error("Plan not found. Save it in the local web app first.");
   if (
     data.plan.requests.some((r) => r.enabled && unsafeMethods.has(r.method)) &&
@@ -32,6 +33,7 @@ async function main() {
   }
   const run = new Run(data.plan, data.secrets, data.mysqlSecrets, (report) => store.saveReport(report));
   process.once("SIGINT", () => run.stop());
+  console.log(`Environment: ${data.plan.environment.name} (${data.plan.baseUrl})`);
   console.log(
     `Preflight, then ${data.plan.tenants.length * data.plan.settings.vusPerTenant} virtual users. Ctrl+C stops gracefully.`,
   );
