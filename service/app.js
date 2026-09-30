@@ -4,6 +4,8 @@
 // `npm run package` has exported web/out.
 
 const { spawn } = require("child_process");
+const http = require("http");
+const net = require("net");
 const path = require("path");
 
 let sea = null;
@@ -19,20 +21,9 @@ if (!process.env.TENANT_PULSE_DATA)
     : path.join(__dirname, "data");
 if (!sea && !process.env.TENANT_PULSE_WEB) process.env.TENANT_PULSE_WEB = path.join(__dirname, "..", "web", "out");
 
-const server = require("./server");
-if (sea)
-  server.staticFile = (name) => {
-    try {
-      return Buffer.from(sea.getAsset(name));
-    } catch (_) {
-      return null;
-    }
-  };
+const pageUrl = (port) => `http://127.0.0.1:${port}/workspace/requests`;
 
-const port = Number(process.env.API_PORT || 4174);
-const url = `http://127.0.0.1:${port}/workspace/requests`;
-
-function openBrowser() {
+function openBrowser(url) {
   if (process.env.TENANT_PULSE_NO_OPEN) return;
   const [cmd, args] =
     process.platform === "win32"
@@ -52,18 +43,63 @@ function fail(message) {
   } else process.exit(1);
 }
 
-server.on("error", (error) => {
-  if (error.code === "EADDRINUSE") {
-    console.log(`Port ${port} is in use; Tenant Pulse may already be running. Opening ${url}`);
-    console.log("To use another port, set API_PORT (for example API_PORT=4180).");
-    openBrowser();
-    setTimeout(() => process.exit(0), 500);
-  } else fail(`Could not start Tenant Pulse: ${error.message}`);
-});
-server.listen(port, "127.0.0.1", () => {
-  console.log(`Tenant Pulse is running at ${url}`);
-  console.log(`Data folder: ${process.env.TENANT_PULSE_DATA}`);
-  console.log("Keep this window open while you use it. Press Ctrl+C to stop.");
-  openBrowser();
-});
+const isFree = (port) =>
+  new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once("error", () => resolve(false));
+    probe.listen(port, "127.0.0.1", () => probe.close(() => resolve(true)));
+  });
+
+// True when the port already runs a packaged Tenant Pulse (it serves the web page, not only /api).
+const isTenantPulse = (port) =>
+  new Promise((resolve) => {
+    const req = http.get(pageUrl(port), { timeout: 1500 }, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200 && String(res.headers["content-type"]).startsWith("text/html"));
+    });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(false));
+  });
+
+// Returns { port } to listen on, or { running } when this app is already up.
+async function choosePort() {
+  const fixed = process.env.API_PORT;
+  const first = Number(fixed || 4174);
+  const last = fixed ? first : first + 20;
+  for (let port = first; port <= last; port++) {
+    if (await isFree(port)) return { port };
+    if (await isTenantPulse(port)) return { running: port };
+  }
+  return { error: fixed ? `Port ${first} is used by another program.` : `Ports ${first}–${last} are all in use.` };
+}
+
+async function main() {
+  const choice = await choosePort();
+  if (choice.error) return fail(`${choice.error} Set API_PORT to a free port (for example API_PORT=4300).`);
+  if (choice.running) {
+    console.log(`Tenant Pulse is already running. Opening ${pageUrl(choice.running)}`);
+    openBrowser(pageUrl(choice.running));
+    return setTimeout(() => process.exit(0), 500);
+  }
+  // server.js reads API_PORT when loaded (its Host/Origin guard), so set it first.
+  process.env.API_PORT = String(choice.port);
+  const server = require("./server");
+  if (sea)
+    server.staticFile = (name) => {
+      try {
+        return Buffer.from(sea.getAsset(name));
+      } catch (_) {
+        return null;
+      }
+    };
+  server.on("error", (error) => fail(`Could not start Tenant Pulse: ${error.message}`));
+  server.listen(choice.port, "127.0.0.1", () => {
+    console.log(`Tenant Pulse is running at ${pageUrl(choice.port)}`);
+    console.log(`Data folder: ${process.env.TENANT_PULSE_DATA}`);
+    console.log("Keep this window open while you use it. Press Ctrl+C to stop.");
+    openBrowser(pageUrl(choice.port));
+  });
+}
+
 process.on("SIGINT", () => process.exit(0));
+main().catch((error) => fail(`Could not start Tenant Pulse: ${error.message}`));
