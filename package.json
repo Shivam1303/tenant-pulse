@@ -1,0 +1,15 @@
+{
+  "name": "tenant-pulse",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Local multi-tenant API performance testing",
+  "scripts": {
+    "dev": "node start.js dev",
+    "start": "node start.js start",
+    "test": "node service/test/mock.test.js",
+    "build": "npm --prefix web run build"
+  },
+  "engines": {
+    "node": ">=20.9"
+  }
+}

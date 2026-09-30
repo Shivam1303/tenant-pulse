@@ -1,0 +1,10 @@
+service/data/*
+!service/data/.gitkeep
+*.local.json
+node_modules/
+web/.next/
+
+# Build caches and local env files
+*.tsbuildinfo
+.env
+.env.*

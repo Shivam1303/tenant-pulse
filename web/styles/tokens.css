@@ -1,0 +1,76 @@
+/* Design tokens. Every colour in the app comes from here (charts read them
+   through getComputedStyle), so a theme change is a one-file change. */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from the page background up */
+  --bg: #0b0d12;
+  --panel: #12151c;
+  --raised: #181c25;
+  --hover: #1e2330;
+  --input: #0f1218;
+
+  /* Lines */
+  --border: #232834;
+  --border-strong: #2f3543;
+  --focus: rgba(140, 124, 240, 0.55);
+
+  /* Text */
+  --text: #e6e8ee;
+  --text-2: #b4bac7;
+  --muted: #8a93a6;
+  --faint: #5d6576;
+
+  /* Accent: soft iris */
+  --accent: #8c7cf0;
+  --accent-hover: #a194f5;
+  --accent-ink: #0b0d12;
+  --accent-soft: rgba(140, 124, 240, 0.14);
+  --accent-line: rgba(140, 124, 240, 0.35);
+
+  /* Status */
+  --success: #3fb68b;
+  --success-soft: rgba(63, 182, 139, 0.13);
+  --warning: #e0a955;
+  --warning-soft: rgba(224, 169, 85, 0.13);
+  --danger: #e5626a;
+  --danger-soft: rgba(229, 98, 106, 0.13);
+  --info: #5b9cf0;
+  --info-soft: rgba(91, 156, 240, 0.13);
+  --teal: #4fc1b6;
+
+  /* Chart series */
+  --chart-1: #8c7cf0;
+  --chart-2: #4fc1b6;
+  --chart-3: #e0a955;
+  --chart-4: #e5626a;
+  --chart-5: #5b9cf0;
+  --chart-6: #c58af0;
+  --chart-7: #7fd18b;
+  --chart-8: #f08aa8;
+  --chart-grid: #1c212b;
+  --chart-axis: #5d6576;
+
+  /* HTTP methods */
+  --m-get: #3fb68b;
+  --m-post: #e0a955;
+  --m-put: #5b9cf0;
+  --m-patch: #8c7cf0;
+  --m-delete: #e5626a;
+  --m-other: #8a93a6;
+
+  /* Shape */
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-lg: 12px;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--border-strong);
+
+  /* Type */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Layout */
+  --sidebar: 216px;
+  --sidebar-collapsed: 60px;
+  --topbar: 52px;
+}
