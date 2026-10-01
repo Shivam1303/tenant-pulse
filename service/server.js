@@ -212,7 +212,8 @@ const routes = [
       assertWritesAllowed(data.plan.requests, body);
       checking = true;
       try {
-        const result = await preflight(data.plan, data.secrets);
+        const result = await preflight(data.plan, data.secrets, { counters: data.counters });
+        data.saveCounters(data.counters.snapshot());
         return { ok: result.ok, rows: result.rows };
       } finally {
         checking = false;
@@ -226,7 +227,16 @@ const routes = [
       assertIdle();
       const data = loadPlan(body.planId);
       assertWritesAllowed(data.plan.requests, body);
-      currentRun = new Run(data.plan, data.secrets, data.mysqlSecrets, (report) => store.saveReport(report));
+      currentRun = new Run(
+        data.plan,
+        data.secrets,
+        data.mysqlSecrets,
+        (report, counters) => {
+          store.saveReport(report);
+          data.saveCounters(counters);
+        },
+        data.counters,
+      );
       currentRun.start().catch((error) => {
         console.error("Run stopped:", error);
         currentRun.state = "failed";

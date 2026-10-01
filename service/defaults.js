@@ -46,6 +46,7 @@ const requestDefaults = () => ({
   body: "",
   bodyType: "none",
   authMode: "tenantBearer",
+  generated: [],
 });
 
 function newPlan() {

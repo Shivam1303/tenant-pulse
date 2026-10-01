@@ -1,6 +1,17 @@
 export type Method = "GET" | "HEAD" | "OPTIONS" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type Pair = { key: string; value: string; enabled: boolean };
 export type BodyType = "none" | "json" | "text" | "form";
+// A value a request makes up fresh on every send; mirrors service/generate.js.
+export type GeneratedField = {
+  name: string;
+  type: "uuid" | "counter" | "number" | "pick" | "timestamp" | "text";
+  start?: number | null;
+  min?: number;
+  max?: number;
+  values?: string[];
+  format?: "iso" | "epoch";
+  length?: number;
+};
 export type RequestSpec = {
   name: string;
   method: Method;
@@ -12,8 +23,9 @@ export type RequestSpec = {
   form: Pair[];
   bodyType: BodyType;
   body: string;
+  generated?: GeneratedField[];
 };
-export type LoginSpec = Omit<RequestSpec, "name" | "enabled" | "authMode"> & {
+export type LoginSpec = Omit<RequestSpec, "name" | "enabled" | "authMode" | "generated"> & {
   tokenPath: string;
 };
 export type Tenant = {
@@ -183,6 +195,7 @@ export type TryResult = {
   successFalse?: boolean;
   url?: string;
   method?: string;
+  generated?: Record<string, string>;
 };
 export type LoginTest = {
   ok: boolean;

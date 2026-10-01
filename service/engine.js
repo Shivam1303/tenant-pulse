@@ -6,6 +6,7 @@ const { spawn } = require("child_process");
 const { monitorEventLoopDelay } = require("perf_hooks");
 const { group, add, summary, percentile, verdict, isSuccess } = require("./stats");
 const { isAbsolute } = require("./schema");
+const { Counters, generate } = require("./generate");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const nowMs = () => Number(process.hrtime.bigint()) / 1e6;
@@ -45,8 +46,10 @@ function hasHeader(headers, name) {
   return Object.keys(headers).some((k) => k.toLowerCase() === name);
 }
 
-function makeRequest(baseUrl, spec, tenantVars) {
-  const vars = { ...tenantVars, baseUrl };
+// `counters` is shared by a whole run so generated ids never repeat.
+function makeRequest(baseUrl, spec, tenantVars, counters = new Counters()) {
+  const generated = generate(spec, counters);
+  const vars = { ...tenantVars, baseUrl, ...generated };
   let url;
   if (spec.path.startsWith("{{")) {
     // The URL (or its host) comes from a variable, e.g. {{baseUrl}}/orders.
@@ -94,7 +97,7 @@ function makeRequest(baseUrl, spec, tenantVars) {
     if (!hasHeader(headers, "content-type")) headers["content-type"] = contentType;
     headers["content-length"] = Buffer.byteLength(body);
   }
-  return { url, method: spec.method, headers, body };
+  return { url, method: spec.method, headers, body, generated };
 }
 
 // Sends one request. The body is only buffered when someone needs it.
@@ -228,7 +231,7 @@ async function mapLimit(items, limit, fn) {
 }
 
 // Authenticates every tenant and calls each enabled request once.
-async function preflight(plan, secrets, { onRow, shouldStop } = {}) {
+async function preflight(plan, secrets, { onRow, shouldStop, counters = new Counters() } = {}) {
   const agent = agentFor();
   const tokens = new Map();
   const enabled = plan.requests.filter((r) => r.enabled);
@@ -254,7 +257,7 @@ async function preflight(plan, secrets, { onRow, shouldStop } = {}) {
         if (shouldStop && shouldStop()) break;
         try {
           const result = await send(
-            makeRequest(plan.baseUrl, spec, tenantVariables(tenant, token)),
+            makeRequest(plan.baseUrl, spec, tenantVariables(tenant, token), counters),
             plan.settings.timeoutMs,
             agent,
             { checkBody: plan.settings.checkSuccessField },
@@ -281,7 +284,7 @@ async function tryRequest(ctx, tenant, secret, spec) {
     const { token } = needsToken ? await login(ctx, tenant, secret, agent) : { token: "" };
     const request = makeRequest(ctx.baseUrl, spec, tenantVariables(tenant, token));
     const result = await send(request, ctx.settings.timeoutMs, agent, { keepBody: true });
-    return { ...result, url: request.url.pathname + request.url.search, method: spec.method };
+    return { ...result, url: request.url.pathname + request.url.search, method: spec.method, generated: request.generated };
   } finally {
     agent.destroy();
   }
@@ -358,8 +361,9 @@ async function sleepUnless(ms, stopped) {
 }
 
 class Run {
-  constructor(plan, secrets, mysqlSecrets, onDone) {
+  constructor(plan, secrets, mysqlSecrets, onDone, counters = new Counters()) {
     this.plan = plan;
+    this.counters = counters;
     this.secrets = secrets;
     this.mysqlSecrets = mysqlSecrets || {};
     this.onDone = onDone;
@@ -481,7 +485,7 @@ class Run {
       while (!stopped() && Date.now() < deadline) {
         const spec = this.enabled[cursor++ % this.enabled.length];
         const result = await send(
-          makeRequest(this.plan.baseUrl, spec, vars),
+          makeRequest(this.plan.baseUrl, spec, vars, this.counters),
           this.plan.settings.timeoutMs,
           agent,
           { checkBody },
@@ -503,6 +507,7 @@ class Run {
     const check = await preflight(this.plan, this.secrets, {
       onRow: (row) => this.preflight.rows.push(row),
       shouldStop: () => this.stopRequested,
+      counters: this.counters,
     });
     if (this.stopRequested || !check.ok) {
       this.state = "failed";
@@ -542,7 +547,7 @@ class Run {
       this.event(this.stopRequested ? "Stopped early" : "Finished");
     }
     const report = this.report();
-    if (this.onDone) await this.onDone(report);
+    if (this.onDone) await this.onDone(report, this.counters.snapshot());
     return report;
   }
   report() {

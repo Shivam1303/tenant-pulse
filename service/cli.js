@@ -26,12 +26,22 @@ async function main() {
   )
     throw new Error("Write requests require --allow-writes.");
   if (args.includes("--preflight-only")) {
-    const check = await preflight(data.plan, data.secrets);
+    const check = await preflight(data.plan, data.secrets, { counters: data.counters });
+    data.saveCounters(data.counters.snapshot());
     printRows(check.rows);
     if (!check.ok) process.exitCode = 1;
     return;
   }
-  const run = new Run(data.plan, data.secrets, data.mysqlSecrets, (report) => store.saveReport(report));
+  const run = new Run(
+    data.plan,
+    data.secrets,
+    data.mysqlSecrets,
+    (report, counters) => {
+      store.saveReport(report);
+      data.saveCounters(counters);
+    },
+    data.counters,
+  );
   process.once("SIGINT", () => run.stop());
   console.log(`Environment: ${data.plan.environment.name} (${data.plan.baseUrl})`);
   console.log(

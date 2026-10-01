@@ -18,13 +18,14 @@ import {
 import { useWorkspace } from "../../../components/workspace-provider";
 import { Empty, Field, Menu, PairEditor, Switch, useConfirm } from "../../../components/ui";
 import { ImportDialog } from "../../../components/import-dialog";
+import { GeneratedEditor } from "../../../components/generated-editor";
 import { api } from "../../../lib/api";
 import { blankRequest, builtins, isAbsolute, ownsUrl, requestVariables, uniqueName, unsafeMethods } from "../../../lib/plan";
 import { bytes, ms } from "../../../lib/format";
 import type { BodyType, Method, RequestSpec, TryResult } from "../../../lib/types";
 
 const methods: Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
-type Tab = "params" | "headers" | "body" | "auth";
+type Tab = "params" | "headers" | "body" | "generated" | "auth";
 const bodyTypes: { id: BodyType; label: string }[] = [
   { id: "none", label: "None" },
   { id: "json", label: "JSON" },
@@ -68,6 +69,16 @@ function ResponsePanel({ response, sending }: { response: TryResult | null; send
         <code className="response-url">
           <span className={`method ${response.method}`}>{response.method}</span> {response.url}
         </code>
+      ) : null}
+      {response.generated && Object.keys(response.generated).length ? (
+        <div className="var-chips">
+          <span className="faint">Generated</span>
+          {Object.entries(response.generated).map(([name, value]) => (
+            <span key={name} className="badge" title={value}>
+              {name}={value.length > 24 ? `${value.slice(0, 24)}…` : value}
+            </span>
+          ))}
+        </div>
       ) : null}
       <pre className="response-pre">{response.body ? pretty(response.body) : "Empty response body"}</pre>
     </div>
@@ -192,7 +203,13 @@ export default function RequestsPage() {
           settings: plan.settings,
           login: { ...plan.login, headers: strip(plan.login.headers), query: strip(plan.login.query), form: strip(plan.login.form) },
           tenant,
-          request: { ...request, query: strip(request.query), headers: strip(request.headers), form: strip(request.form) },
+          request: {
+            ...request,
+            query: strip(request.query),
+            headers: strip(request.headers),
+            form: strip(request.form),
+            generated: (request.generated || []).filter((g) => g.name.trim()),
+          },
           allowWrites: true,
         }),
       });
@@ -207,6 +224,7 @@ export default function RequestsPage() {
   const counts = {
     params: request.query.filter((p) => p.key).length,
     headers: request.headers.filter((p) => p.key).length,
+    generated: (request.generated || []).length,
   };
 
   return (
@@ -383,6 +401,7 @@ export default function RequestsPage() {
               ["params", "Params", counts.params],
               ["headers", "Headers", counts.headers],
               ["body", "Body", request.bodyType === "none" ? 0 : request.bodyType.toUpperCase()],
+              ["generated", "Generated", counts.generated],
               ["auth", "Auth", 0],
             ] as const
           ).map(([id, label, count]) => (
@@ -454,6 +473,9 @@ export default function RequestsPage() {
                 />
               )}
             </div>
+          ) : null}
+          {tab === "generated" ? (
+            <GeneratedEditor fields={request.generated || []} onChange={(generated) => update({ generated })} />
           ) : null}
           {tab === "auth" ? (
             <div className="auth-tab">

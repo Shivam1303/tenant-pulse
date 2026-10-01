@@ -1,5 +1,6 @@
 "use strict";
 
+const { TYPES: generatorTypes } = require("./generate");
 const tokenPattern = /\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g;
 const allowedMethods = new Set([
   "GET",
@@ -100,8 +101,10 @@ function names(template) {
   return [...template.matchAll(tokenPattern)].map((match) => match[1]);
 }
 
-// Every {{variable}} a request needs, in the order they appear.
+// Every {{variable}} a request needs from tenants, in the order they appear.
+// Generated fields make up their own values, so they are not needed.
 function requestVariables(r) {
+  const made = new Set((r.generated || []).map((g) => g.name));
   return [
     r.path,
     ...r.query.filter((p) => p.enabled).flatMap((p) => [p.key, p.value]),
@@ -110,7 +113,54 @@ function requestVariables(r) {
       ? r.form.filter((p) => p.enabled).flatMap((p) => [p.key, p.value])
       : []),
     ...(r.bodyType === "json" || r.bodyType === "text" ? [r.body] : []),
-  ].flatMap(names);
+  ]
+    .flatMap(names)
+    .filter((n) => !made.has(n));
+}
+
+// Fields a request makes up fresh on every send; see generate.js.
+function generatedFields(value, field) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > 20) fail(field, "Add at most 20 generated fields.");
+  const seen = new Set();
+  return value.map((g, i) => {
+    const at = `${field}.${i}`;
+    if (!g || typeof g !== "object") fail(at, "Invalid generated field.");
+    const name = text(g.name, `${at}.name`, 64, true);
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || builtins.has(name) || seen.has(name))
+      fail(
+        `${at}.name`,
+        builtins.has(name)
+          ? `{{${name}}} is provided automatically; pick another name.`
+          : seen.has(name)
+            ? `Two generated fields are named ${name}.`
+            : "Generated field names need letters, numbers and underscores, starting with a letter.",
+      );
+    seen.add(name);
+    if (!generatorTypes.includes(g.type)) fail(`${at}.type`, `Choose a type for ${name}.`);
+    switch (g.type) {
+      case "counter":
+        return { name, type: "counter", start: optionalNumber(g.start, `${at}.start`, 0, Number.MAX_SAFE_INTEGER - 1e9) };
+      case "number": {
+        const min = number(g.min, `${at}.min`, -1e12, 1e12, true);
+        const max = number(g.max, `${at}.max`, -1e12, 1e12, true);
+        if (max < min) fail(`${at}.max`, `The largest number for ${name} must not be below the smallest.`);
+        return { name, type: "number", min, max };
+      }
+      case "pick": {
+        const values = Array.isArray(g.values) ? g.values.map((v) => String(v).trim()).filter(Boolean) : [];
+        if (!values.length || values.length > 200 || values.some((v) => v.length > 256))
+          fail(`${at}.values`, `Enter at least one value for ${name}.`);
+        return { name, type: "pick", values };
+      }
+      case "timestamp":
+        return { name, type: "timestamp", format: g.format === "epoch" ? "epoch" : "iso" };
+      case "text":
+        return { name, type: "text", length: number(g.length, `${at}.length`, 1, 64, true) };
+      default:
+        return { name, type: "uuid" };
+    }
+  });
 }
 
 function validateRequest(r, field) {
@@ -152,6 +202,7 @@ function validateRequest(r, field) {
   if (!["none", "json", "text", "form"].includes(bodyType))
     fail(`${field}.bodyType`, "Choose no body, JSON, text, or URL-encoded form.");
   const body = rawText(r.body || "", `${field}.body`, 65536);
+  const generated = generatedFields(r.generated, `${field}.generated`);
   if (bodyType === "json" && body && !names(body).length) {
     try {
       JSON.parse(body);
@@ -169,6 +220,7 @@ function validateRequest(r, field) {
     form,
     bodyType,
     body,
+    generated,
     enabled: r.enabled !== false,
   };
 }

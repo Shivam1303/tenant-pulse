@@ -841,3 +841,22 @@ pre {
     transition: none !important;
   }
 }
+
+/* ---------- Generated fields ---------- */
+.generated-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px minmax(0, 1.6fr) 28px;
+  gap: 6px;
+  align-items: center;
+}
+.generated-options {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.generated-options .input,
+.generated-options .select {
+  min-width: 0;
+  flex: 1;
+}

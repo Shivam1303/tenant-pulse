@@ -13,7 +13,8 @@ process.env.API_PORT = "4999";
 const { newPlan } = require("../defaults");
 const { validatePlan, validateEnvironment, resolveRun, validateRequest } = require("../schema");
 const { importText } = require("../importer");
-const { preflight, tryRequest, testLogin, Run } = require("../engine");
+const { preflight, tryRequest, testLogin, Run, makeRequest } = require("../engine");
+const { Counters } = require("../generate");
 const stats = require("../stats");
 
 function mockApi() {
@@ -408,6 +409,12 @@ function testMigration(store) {
   assert.strictEqual(store.environmentSecrets("api-test-8080")[7].token, "tok");
   assert(fs.existsSync(path.join(dir, "plans.json.bak")) && fs.existsSync(path.join(dir, "secrets.json.bak")));
   assert.strictEqual(store.runPlan("default").plan.tenants[0].client, "7", "a migrated plan still runs");
+  assert.deepStrictEqual(store.plans().default.requests[0].generated, [], "old requests migrate with no generated fields");
+  // Counters continue across runs of the same plan and environment.
+  const first = store.runPlan("default");
+  first.counters.take("Create order::id", 100);
+  first.saveCounters(first.counters.snapshot());
+  assert.strictEqual(store.runPlan("default").counters.take("Create order::id", 1), Math.max(101, 1), "the next run continues");
   // Idempotent: a second read changes nothing.
   const before = fs.readFileSync(path.join(dir, "environments.json"), "utf8");
   store.plans();
@@ -513,9 +520,61 @@ function testImport() {
   assert.throws(() => importText('{"foo":1}', ""), /Unknown JSON/);
 }
 
+function testGenerate() {
+  const base = { name: "Create order", method: "POST", path: "/orders", bodyType: "json" };
+  const body = '{"uuid":"{{orderUuid}}","id":{{orderId}},"qty":{{qty}},"at":"{{placedAt}}","ch":"{{channel}}","ref":"{{ref}}","again":"{{orderUuid}}"}';
+  const generated = [
+    { name: "orderUuid", type: "uuid" },
+    { name: "orderId", type: "counter", start: 1000 },
+    { name: "qty", type: "number", min: 1, max: 5 },
+    { name: "placedAt", type: "timestamp", format: "iso" },
+    { name: "channel", type: "pick", values: ["web", "app", "pos"] },
+    { name: "ref", type: "text", length: 8 },
+  ];
+  const spec = validateRequest({ ...base, body, generated }, "requests.0");
+  assert.strictEqual(spec.generated.length, 6);
+  assert.deepStrictEqual(validateRequest({ ...base, body: "{}" }, "r").generated, [], "old requests get no generated fields");
+
+  // Every send gets fresh values; a name used twice in one send agrees with itself.
+  const counters = new Counters();
+  const sends = Array.from({ length: 50 }, () => JSON.parse(makeRequest("http://x.test", spec, {}, counters).body));
+  assert.strictEqual(new Set(sends.map((b) => b.uuid)).size, 50, "UUIDs are unique");
+  assert(sends.every((b) => b.uuid === b.again), "one name, one value per send");
+  assert.deepStrictEqual(sends.map((b) => b.id).slice(0, 3), [1000, 1001, 1002], "counter counts up from its start");
+  assert(sends.every((b) => b.qty >= 1 && b.qty <= 5 && ["web", "app", "pos"].includes(b.ch) && /^[a-z0-9]{8}$/.test(b.ref)));
+  assert(sends.every((b) => !Number.isNaN(Date.parse(b.at))));
+  assert(makeRequest("http://x.test", spec, {}, counters).generated.orderId, "Send can show what was generated");
+
+  // Time-based by default, and never below where the last run ended.
+  const before = Date.now();
+  const timed = new Counters();
+  const first = timed.take("a::id");
+  assert(first >= before && first <= Date.now(), "default start is the current time in ms");
+  assert.strictEqual(timed.take("a::id"), first + 1);
+  const resumed = new Counters({ "a::id": first + 500 });
+  assert.strictEqual(resumed.take("a::id"), first + 500, "continues from the last run");
+  assert.strictEqual(resumed.take("a::id", 5), first + 501, "a lower start never reuses ids");
+  assert.strictEqual(new Counters(resumed.snapshot()).take("a::id"), first + 502);
+
+  // Generated names are not variables tenants must fill in.
+  const need = require("../schema").requiredVariables([{ ...spec, enabled: true }], null);
+  assert.deepStrictEqual(need.requests, []);
+
+  const bad = (generated, field) =>
+    assert.throws(() => validateRequest({ ...base, body, generated }, "requests.0"), (e) => e.field === field);
+  bad([{ name: "token", type: "uuid" }], "requests.0.generated.0.name");
+  bad([{ name: "a", type: "uuid" }, { name: "a", type: "uuid" }], "requests.0.generated.1.name");
+  bad([{ name: "1x", type: "uuid" }], "requests.0.generated.0.name");
+  bad([{ name: "a", type: "nope" }], "requests.0.generated.0.type");
+  bad([{ name: "a", type: "number", min: 5, max: 1 }], "requests.0.generated.0.max");
+  bad([{ name: "a", type: "pick", values: [] }], "requests.0.generated.0.values");
+  bad([{ name: "a", type: "text", length: 0 }], "requests.0.generated.0.length");
+}
+
 async function main() {
   testStats();
   testImport();
+  testGenerate();
   const { server, seen } = mockApi();
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {

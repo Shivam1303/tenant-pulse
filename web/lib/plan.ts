@@ -17,14 +17,18 @@ export const ownsUrl = (path: string) => isAbsolute(path) || (path || "").starts
 export const names = (text: string) => [...(text || "").matchAll(pattern)].map((m) => m[1]);
 
 // Mirrors service/schema.js requestVariables.
-export function requestVariables(r: Pick<RequestSpec, "path" | "query" | "headers" | "form" | "bodyType" | "body">) {
+// Generated fields make up their own values, so tenants need not define them.
+export function requestVariables(r: Pick<RequestSpec, "path" | "query" | "headers" | "form" | "bodyType" | "body"> & { generated?: { name: string }[] }) {
+  const made = new Set((r.generated || []).map((g) => g.name));
   return [
     r.path,
     ...(r.query || []).filter((p) => p.enabled).flatMap((p) => [p.key, p.value]),
     ...(r.headers || []).filter((p) => p.enabled).map((p) => p.value),
     ...(r.bodyType === "form" ? (r.form || []).filter((p) => p.enabled).flatMap((p) => [p.key, p.value]) : []),
     ...(r.bodyType === "json" || r.bodyType === "text" ? [r.body] : []),
-  ].flatMap(names);
+  ]
+    .flatMap(names)
+    .filter((n) => !made.has(n));
 }
 
 export function requiredVariables(plan: Plan) {
@@ -62,6 +66,7 @@ export const blankRequest = (n: number): RequestSpec => ({
   form: [],
   bodyType: "none",
   body: "",
+  generated: [],
 });
 
 export const blankTenant = (): Tenant => ({

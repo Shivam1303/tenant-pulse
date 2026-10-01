@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { newPlan, newEnvironment, migratePlan, migrateEnvironment } = require("./defaults");
 const { validatePlan, validateEnvironment, resolveRun, fail } = require("./schema");
+const { Counters } = require("./generate");
 
 const dir = process.env.TENANT_PULSE_DATA || path.join(__dirname, "data");
 let ensured = false;
@@ -233,6 +234,18 @@ function environmentSecrets(id) {
   return envSecrets(secrets(), id).tenants;
 }
 
+// counters.json: { [planId]: { [environmentId]: { "request::field": next } } }.
+// Generated counters continue from where the last run ended, per environment
+// because each one has its own database.
+function counterState(planId, envId) {
+  return ((read("counters.json", {})[planId] || {})[envId]) || {};
+}
+function saveCounters(planId, envId, snapshot) {
+  const all = read("counters.json", {});
+  all[planId] = { ...all[planId], [envId]: snapshot };
+  write("counters.json", all);
+}
+
 // A saved plan joined with its environment, ready for preflight or a run.
 // `environmentId` overrides the plan's own choice (CLI --env).
 function runPlan(id, environmentId) {
@@ -248,6 +261,9 @@ function runPlan(id, environmentId) {
     plan: resolveRun(plan, validateEnvironment(env), tenantSecrets),
     secrets: tenantSecrets,
     mysqlSecrets: planSecrets(allSecrets, id).mysql,
+    counters: new Counters(counterState(id, envId)),
+    // Call with counters.snapshot() once sends are done.
+    saveCounters: (snapshot) => saveCounters(id, envId, snapshot),
   };
 }
 
@@ -276,6 +292,11 @@ function removePlan(id) {
   const allSecrets = secrets();
   delete allSecrets.plans[id];
   write("secrets.json", allSecrets);
+  const counters = read("counters.json", {});
+  if (counters[id]) {
+    delete counters[id];
+    write("counters.json", counters);
+  }
   return true;
 }
 

@@ -43,6 +43,8 @@ function cleaned(plan: Plan): Plan {
     query: (r.query || []).filter((p) => p.key?.trim()),
     headers: (r.headers || []).filter((p) => p.key?.trim()),
     form: (r.form || []).filter((p) => p.key?.trim()),
+    // Half-typed generated fields (no name yet) are dropped like blank rows.
+    generated: (r as { generated?: { name: string }[] }).generated?.filter((g) => g.name?.trim()),
   });
   return { ...plan, requests: plan.requests.map(strip), login: strip(plan.login) };
 }
